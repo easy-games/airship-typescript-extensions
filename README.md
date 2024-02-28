@@ -1,20 +1,20 @@
-# roblox-ts Extensions
-This is a Language Service plugin that improves the editing experience while using roblox-ts.
+# unity-ts Extensions
+This is a Language Service plugin that improves the editing experience while using unity-ts.
 
 ### Features
 - Remove or prefix cross-boundary imports in intellisense.
 - Warn about non-type only cross-boundary imports.
-- Remove internal fields from roblox-ts types.
+- Remove internal fields from unity-ts types.
 - Remove deprecated entries from intellisense.
 - Remove @hidden entries from intellisense.
 
 ## Visual Studio Code
-If you use Visual Studio Code, it's recommended that you install this using [our extension.](https://marketplace.visualstudio.com/items?itemName=Roblox-TS.vscode-roblox-ts)
+If you use Visual Studio Code, it's recommended that you install this using [our extension.](https://marketplace.visualstudio.com/items?itemName=unity-ts.vscode-unity-ts)
 
 ## Installation
 You install this like you would any npm package.
 
-`npm install --save-dev roblox-ts-extensions`
+`npm install --save-dev unity-ts-extensions`
 
 To enable the plugin and configure it, please look to the sections below.
 
@@ -55,7 +55,7 @@ To enable the plugin, add the following "plugins" field to your tsconfig's compi
 		// ...
 		"plugins": [
 			{
-				"name": "roblox-ts-extensions",
+				"name": "unity-ts-extensions",
 
 				// All the following fields are optional and will use their defaults if omitted.
 
