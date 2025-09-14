@@ -5,7 +5,7 @@
 "use strict";
 
 import {} from "ts-expose-internals";
-import * as ts from "typescript";
+import ts from "typescript";
 import { createProxy } from "./util/functions/createProxy";
 import { Provider } from "./util/provider";
 import { AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE, BOUNDARY_DIAGNOSTIC_CODE } from "./util/constants";
@@ -21,8 +21,10 @@ const AIRSHIP_MARKER = "_airship_marker_service";
 export = function init(modules: { typescript: typeof ts }) {
 	const ts = modules.typescript;
 	let provider: Provider;
+
 	function create(info: PluginCreateInfo) {
 		const service = info.languageService;
+
 		if (!isAirshipProject(ts, info)) {
 			// This project does not depend on @rbxts/compiler-types, so skip instantiation.
 			console.log("airship-typescript-extensions skipped due to not being Airship project");

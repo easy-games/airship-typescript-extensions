@@ -26,7 +26,7 @@ const CLARIFIED_DIAGNOSTICS: Array<ClarifiedDiagnostic> = [
 export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageService["getSemanticDiagnostics"] {
 	const { service, config, ts } = provider;
 	return (file) => {
-		const orig = service.getSemanticDiagnostics(file);
+		const diagnostics = service.getSemanticDiagnostics(file);
 		if (config.diagnosticsMode !== "off") {
 			// const diagnosticsCategory = {
 			// 	["warning"]: ts.DiagnosticCategory.Warning,
@@ -39,17 +39,6 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 			// 	.filter((x) => !x.typeOnly)
 			// 	.forEach(($import) => {
 			// 		const importBoundary = getNetworkBoundary(provider, $import.absolutePath);
-			// 		provider.log(
-			// 			"Airship import boundary check",
-			// 			currentBoundary,
-			// 			"from",
-			// 			file,
-			// 			"checking against boundary",
-			// 			importBoundary,
-			// 			"for",
-			// 			$import.absolutePath,
-			// 			"canSee? " + boundaryCanSee(currentBoundary, importBoundary),
-			// 		);
 			// 		if (!boundaryCanSee(currentBoundary, importBoundary)) {
 			// 			orig.push({
 			// 				category: diagnosticsCategory,
@@ -61,51 +50,77 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 			// 			});
 			// 		}
 			// 	});
-		}
 
-		const sourceFile = provider.getSourceFile(file);
-		const airshipBehaviours = getAirshipBehaviours(provider, sourceFile);
+			const sourceFile = provider.getSourceFile(file);
+			const airshipBehaviours = getAirshipBehaviours(provider, sourceFile);
 
-		airshipBehaviours
-			.filter((behaviour) => {
-				const declaration = behaviour.node;
-				return (
-					declaration.modifiers === undefined ||
-					!declaration.modifiers.find(
-						(modifier) => ts.isAbstractModifier(modifier) || modifier.kind === ts.SyntaxKind.DefaultKeyword,
-					)
-				);
+			ts.forEachChildRecursively(sourceFile, (node) => {
+				if (ts.isIfStatement(node)) {
+					
+				}
 			})
-			.forEach(($behaviour) => {
-				const name = $behaviour.name;
-				const classDeclaration = $behaviour.node;
-				const nameNode = $behaviour.node.name;
 
-				const startPos = nameNode?.getStart() ?? classDeclaration.getStart();
-				const endPos = nameNode?.getEnd() ?? classDeclaration.getEnd();
+			airshipBehaviours.forEach(($behaviour) => {
+				for (const member of $behaviour.node.members) {
+					if (ts.isConstructorDeclaration(member)) {
+						const startPos = member.name?.getStart() ?? member.getStart();
+						const endPos = (member.name?.getEnd() ?? member.getEnd()) - startPos;
 
-				orig.push({
-					category: ts.DiagnosticCategory.Error,
-					code: AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE,
-					file: sourceFile,
-					messageText: `AirshipBehaviour '${name}' must have a default or abstract modifier`,
-					start: startPos,
-					length: endPos - startPos,
-				});
-			});
-
-		orig.forEach((diagnostic) => {
-			if (typeof diagnostic.messageText === "string") {
-				for (const clarifiedDiagnostic of CLARIFIED_DIAGNOSTICS) {
-					const match = clarifiedDiagnostic.regex.exec(diagnostic.messageText);
-					if (match) {
-						clarifiedDiagnostic.func(diagnostic, match);
-						break;
+						diagnostics.push({
+							category: ts.DiagnosticCategory.Warning,
+							code: AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE + 1,
+							file: sourceFile,
+							messageText:
+								"An AirshipBehaviour should not have a constructor, you should instead use the Awake() lifecycle method",
+							start: startPos,
+							length: endPos,
+						});
 					}
 				}
-			}
-		});
+			});
 
-		return orig;
+			airshipBehaviours
+				.filter((behaviour) => {
+					const declaration = behaviour.node;
+					return (
+						declaration.modifiers === undefined ||
+						!declaration.modifiers.find(
+							(modifier) =>
+								ts.isAbstractModifier(modifier) || modifier.kind === ts.SyntaxKind.DefaultKeyword,
+						)
+					);
+				})
+				.forEach(($behaviour) => {
+					const name = $behaviour.name;
+					const classDeclaration = $behaviour.node;
+					const nameNode = $behaviour.node.name;
+
+					const startPos = nameNode?.getStart() ?? classDeclaration.getStart();
+					const endPos = nameNode?.getEnd() ?? classDeclaration.getEnd();
+
+					diagnostics.push({
+						category: ts.DiagnosticCategory.Error,
+						code: AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE,
+						file: sourceFile,
+						messageText: `AirshipBehaviour '${name}' must have a default or abstract modifier`,
+						start: startPos,
+						length: endPos - startPos,
+					});
+				});
+
+			diagnostics.forEach((diagnostic) => {
+				if (typeof diagnostic.messageText === "string") {
+					for (const clarifiedDiagnostic of CLARIFIED_DIAGNOSTICS) {
+						const match = clarifiedDiagnostic.regex.exec(diagnostic.messageText);
+						if (match) {
+							clarifiedDiagnostic.func(diagnostic, match);
+							break;
+						}
+					}
+				}
+			});
+		}
+
+		return diagnostics;
 	};
 }

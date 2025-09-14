@@ -211,12 +211,12 @@ export function getCompletionsAtPositionFactory(provider: Provider): ts.Language
 				const boundaryAtContext = isImport ? fileBoundary : scopeBoundary;
 				const completionBoundary =
 					modification.boundary ?? getNetworkBoundary(provider, getCompletionSource(v));
-				if (boundaryAtContext && !boundaryCanSee(boundaryAtContext, completionBoundary)) {
-					if (config.mode === "prefix") {
-						v.insertText = v.name;
-						v.name = completionBoundary + ": " + v.name;
-					} else if (config.mode === "remove") return;
-				}
+				// if (boundaryAtContext && !boundaryCanSee(boundaryAtContext, completionBoundary)) {
+				// 	if (config.mode === "prefix") {
+				// 		v.insertText = v.name;
+				// 		v.name = completionBoundary + ": " + v.name;
+				// 	} else if (config.mode === "remove") return;
+				// }
 
 				entries.push(v);
 			});

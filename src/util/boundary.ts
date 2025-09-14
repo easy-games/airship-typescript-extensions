@@ -21,11 +21,11 @@ function getNetworkBoundaryNoCache(provider: Provider, file: string): NetworkBou
 	const { currentDirectory, config } = provider;
 
 	if (file.length === 0) return NetworkBoundary.Shared;
-	if (isInDirectories(file, currentDirectory, config.client)) return NetworkBoundary.Client;
-	if (isInDirectories(file, currentDirectory, config.server)) return NetworkBoundary.Server;
+	// if (isInDirectories(file, currentDirectory, config.client)) return NetworkBoundary.Client;
+	// if (isInDirectories(file, currentDirectory, config.server)) return NetworkBoundary.Server;
 
-	if (isInDirectories(file, currentDirectory, ["Client"])) return NetworkBoundary.Client;
-	if (isInDirectories(file, currentDirectory, ["Server"])) return NetworkBoundary.Server;
+	// if (isInDirectories(file, currentDirectory, ["Client"])) return NetworkBoundary.Client;
+	// if (isInDirectories(file, currentDirectory, ["Server"])) return NetworkBoundary.Server;
 
 	return NetworkBoundary.Shared;
 }

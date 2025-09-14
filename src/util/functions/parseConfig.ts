@@ -4,10 +4,10 @@ import * as z from "zod";
  * The plugin's configuration.
  */
 export interface PluginConfig {
-	useRojo: boolean;
-	client: string[];
-	server: string[];
-	mode: "remove" | "prefix";
+	// useRojo: boolean;
+	// client: string[];
+	// server: string[];
+	// mode: "remove" | "prefix";
 	hideDeprecated: boolean;
 	diagnosticsMode: "off" | "warning" | "error" | "message";
 }
@@ -17,10 +17,10 @@ export interface PluginConfig {
  */
 const CONFIG_SCHEMA = z
 	.object({
-		mode: z.enum(["remove", "prefix"]),
-		useRojo: z.boolean(),
-		client: z.array(z.string()),
-		server: z.array(z.string()),
+		// mode: z.enum(["remove", "prefix"]),
+		// useRojo: z.boolean(),
+		// client: z.array(z.string()),
+		// server: z.array(z.string()),
 		hideDeprecated: z.boolean(),
 		diagnosticsMode: z.enum(["off", "warning", "error", "message"]),
 	})
@@ -35,10 +35,10 @@ export function parseConfig(unsafeConfig: any): PluginConfig {
 	const parsedConfig = CONFIG_SCHEMA.safeParse(unsafeConfig);
 	const config = parsedConfig.success ? parsedConfig.data : {};
 	return {
-		mode: config.mode ?? "prefix",
-		useRojo: config.useRojo ?? true,
-		client: config.client ?? [],
-		server: config.server ?? [],
+		// mode: config.mode ?? "prefix",
+		// useRojo: config.useRojo ?? true,
+		// client: config.client ?? [],
+		// server: config.server ?? [],
 		hideDeprecated: config.hideDeprecated ?? false,
 		diagnosticsMode: config.diagnosticsMode ?? "warning",
 	};
