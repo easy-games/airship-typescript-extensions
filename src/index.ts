@@ -8,7 +8,11 @@ import {} from "ts-expose-internals";
 import ts from "typescript";
 import { createProxy } from "./util/functions/createProxy";
 import { Provider } from "./util/provider";
-import { AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE, BOUNDARY_DIAGNOSTIC_CODE } from "./util/constants";
+import {
+	AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE,
+	AirshipCompilerDiagnosticCode,
+	BOUNDARY_DIAGNOSTIC_CODE,
+} from "./util/constants";
 import { PluginCreateInfo } from "./types";
 import { getCompletionsAtPositionFactory } from "./languageService/getCompletionsAtPosition";
 import { getSemanticDiagnosticsFactory } from "./languageService/getSemanticDiagnostics";
@@ -56,7 +60,12 @@ export = function init(modules: { typescript: typeof ts }) {
 
 		// Register the codefix.
 		ts.codefix.registerCodeFix({
-			errorCodes: [BOUNDARY_DIAGNOSTIC_CODE, AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE],
+			errorCodes: [
+				BOUNDARY_DIAGNOSTIC_CODE,
+				AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE,
+				AirshipCompilerDiagnosticCode.ForInStatementUsage,
+				AirshipCompilerDiagnosticCode.NoTypeOfNode,
+			],
 			getCodeActions: () => undefined,
 		});
 

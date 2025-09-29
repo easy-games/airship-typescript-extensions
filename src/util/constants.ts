@@ -24,8 +24,21 @@ export function createConstants(info: PluginCreateInfo) {
 	};
 }
 
-export const BOUNDARY_DIAGNOSTIC_CODE = 1800000;
-export const AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE = 1800001;
-export const INVALID_ID_CODE = 1800002;
+export const BOUNDARY_DIAGNOSTIC_CODE = AirshipCompilerDiagnosticCode.InvalidNetworkBoundary;
+export const AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE =
+	AirshipCompilerDiagnosticCode.InvalidAirshipBehaviourDeclaration;
+
+export const enum AirshipCompilerDiagnosticCode {
+	InvalidNetworkBoundary = 1800000,
+	InvalidAirshipBehaviourDeclaration,
+	AirshipBehaviourWarning,
+	InvalidIdentifier,
+	ForInStatementUsage,
+	NoTypeOfNode,
+	IndexingMethodWithoutCalling,
+	UnsupportedFeature,
+	InvalidEquality,
+	InvalidInverseEquality,
+}
 
 export type Constants = ReturnType<typeof createConstants>;

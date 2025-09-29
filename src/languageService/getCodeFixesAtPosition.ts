@@ -1,46 +1,92 @@
 import type ts from "typescript";
-import { AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE, BOUNDARY_DIAGNOSTIC_CODE } from "../util/constants";
-import { findImport } from "../util/imports";
+import { AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE, AirshipCompilerDiagnosticCode } from "../util/constants";
 import { Provider } from "../util/provider";
-import { findAirshipBehaviour, getAirshipBehaviours } from "../util/airshipBehaviours";
+import { findAirshipBehaviour } from "../util/airshipBehaviours";
+import { AirshipCompilerDiagnostic } from "./getSemanticDiagnostics";
+import { TypeOfExpression } from "typescript";
 
 export function getCodeFixesAtPositionFactory(provider: Provider): ts.LanguageService["getCodeFixesAtPosition"] {
 	const { service, serviceProxy, ts } = provider;
-	return (file, start, end, codes, formatOptions, preferences) => {
-		let orig = service.getCodeFixesAtPosition(file, start, end, codes, formatOptions, preferences);
 
-		// const semanticDiagnostics = serviceProxy
-		// 	.getSemanticDiagnostics(file)
-		// 	.filter((x) => x.code === BOUNDARY_DIAGNOSTIC_CODE);
-		// semanticDiagnostics.forEach((diag) => {
-		// 	if (diag.start !== undefined && diag.length !== undefined) {
-		// 		if (start >= diag.start && end <= diag.start + diag.length) {
-		// 			const sourceFile = provider.getSourceFile(file);
-		// 			const $import = findImport(provider, sourceFile, diag.start);
-		// 			if ($import) {
-		// 				orig = [
-		// 					{
-		// 						fixName: "crossBoundaryImport",
-		// 						fixAllDescription: "Make all cross-boundary imports type only",
-		// 						description: "Make cross-boundary import type only.",
-		// 						changes: [
-		// 							{
-		// 								fileName: file,
-		// 								textChanges: [
-		// 									{
-		// 										newText: "import type",
-		// 										span: ts.createTextSpan($import.start, 6),
-		// 									},
-		// 								],
-		// 							},
-		// 						],
-		// 					},
-		// 					...orig,
-		// 				];
-		// 			}
-		// 		}
-		// 	}
-		// });
+	return (file, start, end, codes, formatOptions, preferences) => {
+		let orig = [...service.getCodeFixesAtPosition(file, start, end, codes, formatOptions, preferences)];
+
+		serviceProxy.getSemanticDiagnostics(file).forEach((diagnostic) => {
+			// const sourceFile = provider.getSourceFile(file);
+			const airshipDiagnostic = diagnostic as AirshipCompilerDiagnostic;
+
+			if (diagnostic.code === AirshipCompilerDiagnosticCode.ForInStatementUsage) {
+				if (airshipDiagnostic.node && ts.isForInStatement(airshipDiagnostic.node)) {
+					const node = airshipDiagnostic.node;
+					const { initializer, expression } = node;
+
+					const expressionType = provider.typeChecker.getTypeAtLocation(expression);
+
+					if (provider.typeChecker.isArrayLikeType(expressionType)) {
+						orig.push({
+							fixName: "toForOfLoopValueIter",
+							description: "To for-of array iterator",
+							changes: [
+								{
+									fileName: file,
+									textChanges: [
+										{
+											newText: `${initializer.getText()} of ${expression.getText()}`,
+											span: ts.createTextSpan(
+												initializer.getStart(),
+												expression.getEnd() - initializer.getStart(),
+											),
+										},
+									],
+								},
+							],
+						});
+					} else {
+						orig.push({
+							fixName: "toForOfLoopkeys",
+							description: "To for-of key iterator",
+							changes: [
+								{
+									fileName: file,
+									textChanges: [
+										{
+											newText: `const [key] of pairs(${expression.getText()})`,
+											span: ts.createTextSpan(
+												initializer.getStart(),
+												expression.getEnd() - initializer.getStart(),
+											),
+										},
+									],
+								},
+							],
+						});
+					}
+				}
+			}
+
+			if (diagnostic.code === AirshipCompilerDiagnosticCode.NoTypeOfNode) {
+				const typeOfNode = airshipDiagnostic.node as ts.TypeOfExpression;
+
+				orig.push({
+					fixName: "convertToTypeOf",
+					description: "Convert to typeOf check",
+					changes: [
+						{
+							fileName: file,
+							textChanges: [
+								{
+									newText: `typeOf(${typeOfNode.expression.getText()})`,
+									span: ts.createTextSpan(
+										typeOfNode.getStart(),
+										typeOfNode.getEnd() - typeOfNode.getStart(),
+									),
+								},
+							],
+						},
+					],
+				});
+			}
+		});
 
 		serviceProxy
 			.getSemanticDiagnostics(file)

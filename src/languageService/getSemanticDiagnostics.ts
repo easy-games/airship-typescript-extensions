@@ -1,8 +1,7 @@
 import type ts from "typescript";
-import { AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE, INVALID_ID_CODE } from "../util/constants";
+import { AirshipCompilerDiagnosticCode } from "../util/constants";
 import { Provider } from "../util/provider";
 import { getAirshipBehaviours } from "../util/airshipBehaviours";
-import { SymbolProvider } from "util/symbols";
 import luau from "@roblox-ts/luau-ast";
 
 interface ClarifiedDiagnostic {
@@ -76,98 +75,176 @@ function isShadowingCompilerDecorator(id: string) {
 	return compilerIdentifiers.includes(id);
 }
 
+export interface AirshipCompilerDiagnostic extends ts.Diagnostic {
+	node?: ts.Node;
+}
+
 export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageService["getSemanticDiagnostics"] {
 	const { service, config, ts } = provider;
 	// const symbols = new SymbolProvider(provider, provider.typeChecker);
 
 	return (file) => {
 		const diagnostics = service.getSemanticDiagnostics(file);
+		const sourceFile = provider.getSourceFile(file);
+
+		function pushNodeDiagnostic(
+			code: AirshipCompilerDiagnosticCode,
+			node: ts.Node,
+			messageText: string,
+			category = ts.DiagnosticCategory.Error,
+		) {
+			const startPos = node.getStart();
+			const endPos = node.getEnd() - startPos;
+
+			diagnostics.push({
+				category,
+				file: sourceFile,
+				messageText: messageText,
+				start: startPos,
+				code,
+				length: endPos,
+				node,
+			} as AirshipCompilerDiagnostic);
+		}
+
 		if (config.diagnosticsMode !== "off") {
-			const sourceFile = provider.getSourceFile(file);
 			const airshipBehaviours = getAirshipBehaviours(provider, sourceFile);
 
 			ts.forEachChildRecursively(sourceFile, (node) => {
+				// typeof
+				if (ts.isTypeOfExpression(node)) {
+					pushNodeDiagnostic(
+						AirshipCompilerDiagnosticCode.NoTypeOfNode,
+						node,
+						`typeof operator is not supported - use typeOf or typeIs!`,
+					);
+				}
+
+				if (ts.isPrivateIdentifier(node)) {
+					pushNodeDiagnostic(
+						AirshipCompilerDiagnosticCode.UnsupportedFeature,
+						node,
+						`private identifiers are not supported!`,
+					);
+				}
+
+				if (ts.isBinaryExpression(node) && ts.isEqualityOperatorKind(node.operatorToken.kind)) {
+					if (node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken) {
+						pushNodeDiagnostic(
+							AirshipCompilerDiagnosticCode.InvalidEquality,
+							node,
+							`operator \`==\` is not supported! use \`===\``,
+						);
+					} else if (node.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken) {
+						pushNodeDiagnostic(
+							AirshipCompilerDiagnosticCode.InvalidInverseEquality,
+							node,
+							`operator \`!=\` is not supported! use \`!==\``,
+						);
+					}
+				}
+
+				if (ts.isDebuggerStatement(node)) {
+					pushNodeDiagnostic(
+						AirshipCompilerDiagnosticCode.UnsupportedFeature,
+						node,
+						`debugger is not supported!`,
+					);
+				}
+
+				if (node.kind === ts.SyntaxKind.NullKeyword) {
+					pushNodeDiagnostic(
+						AirshipCompilerDiagnosticCode.UnsupportedFeature,
+						node,
+						`\`null\` is not supported, use \`undefined\`!`,
+					);
+				}
+
+				if (ts.isLabeledStatement(node)) {
+					pushNodeDiagnostic(
+						AirshipCompilerDiagnosticCode.UnsupportedFeature,
+						node,
+						`labels are not supported!`,
+					);
+				}
+
+				if (ts.isVariableDeclaration(node) && ts.isVarUsing(node)) {
+					pushNodeDiagnostic(
+						AirshipCompilerDiagnosticCode.UnsupportedFeature,
+						node.parent,
+						`using declarations are not supported!`,
+					);
+				}
+
+				if (ts.isExpression(node) && ts.isCommaExpression(node)) {
+					pushNodeDiagnostic(
+						AirshipCompilerDiagnosticCode.UnsupportedFeature,
+						node,
+						`operator \`,\` is not supported!`,
+					);
+				}
+
+				if (ts.isPropertyAccessExpression(node)) {
+					const typeAtLocation = provider.typeChecker.getSymbolAtLocation(node);
+					if (
+						typeAtLocation?.valueDeclaration &&
+						ts.isMethodDeclaration(typeAtLocation.valueDeclaration) &&
+						!ts.isCallExpression(node.parent)
+					) {
+						pushNodeDiagnostic(
+							AirshipCompilerDiagnosticCode.IndexingMethodWithoutCalling,
+							node,
+							`Cannot index a method without calling it!`,
+						);
+					}
+				}
+
+				// Variables with invalid Luau keyword/identifier names
 				if (ts.isVariableDeclaration(node) && node.name && ts.isIdentifier(node.name)) {
 					if (!luau.isValidIdentifier(node.name.text)) {
-						const startPos = node.name.getStart();
-						const endPos = node.name.getEnd() - startPos;
-
-						diagnostics.push({
-							category: ts.DiagnosticCategory.Error,
-							file: sourceFile,
-							messageText: luauKeywords.includes(node.name.text)
+						pushNodeDiagnostic(
+							AirshipCompilerDiagnosticCode.InvalidIdentifier,
+							node.name,
+							luauKeywords.includes(node.name.text)
 								? `${node.name.text} is a Luau keyword and cannot be used as an identifier`
 								: `${node.name.text} is not a valid identifier in Luau`,
-							start: startPos,
-							code: INVALID_ID_CODE,
-							length: endPos,
-						});
+						);
 					} else if (isReservedIdentifier(node.name.text)) {
-						const startPos = node.name.getStart();
-						const endPos = node.name.getEnd() - startPos;
-
-						diagnostics.push({
-							category: ts.DiagnosticCategory.Error,
-							file: sourceFile,
-							messageText: `${node.name.text} is a reserved global and cannot be used`,
-							start: startPos,
-							code: INVALID_ID_CODE,
-							length: endPos,
-						});
+						pushNodeDiagnostic(
+							AirshipCompilerDiagnosticCode.InvalidIdentifier,
+							node.name,
+							`${node.name.text} is a reserved global and cannot be used`,
+						);
 					}
 				}
 
+				/**
+				 * Function declarations with invalid identifier names or Luau keywords
+				 */
 				if (ts.isFunctionDeclaration(node) && node.name) {
 					if (isReservedIdentifier(node.name.text)) {
-						const startPos = node.name.getStart();
-						const endPos = node.name.getEnd() - startPos;
-
-						diagnostics.push({
-							category: ts.DiagnosticCategory.Error,
-							file: sourceFile,
-							messageText: `${node.name.text} is a reserved global and cannot be used as a function name`,
-							start: startPos,
-							code: INVALID_ID_CODE,
-							length: endPos,
-						});
+						pushNodeDiagnostic(
+							AirshipCompilerDiagnosticCode.InvalidIdentifier,
+							node.name,
+							`${node.name.text} is a reserved global and cannot be used as a function name`,
+						);
 					} else if (isShadowingCompilerDecorator(node.name.text)) {
-						const startPos = node.name.getStart();
-						const endPos = node.name.getEnd() - startPos;
-
-						diagnostics.push({
-							category: ts.DiagnosticCategory.Warning,
-							file: sourceFile,
-							messageText: `${node.name.text} is a compiler macro identifier, and should not be used as a function name`,
-							start: startPos,
-							code: INVALID_ID_CODE,
-							length: endPos,
-						});
+						pushNodeDiagnostic(
+							AirshipCompilerDiagnosticCode.InvalidIdentifier,
+							node.name,
+							`${node.name.text} is a compiler macro identifier, and should not be used as a function name`,
+							ts.DiagnosticCategory.Warning,
+						);
 					}
 				}
 
-				// if (ts.isPropertyAccessExpression(node)) {
-				// 	const typeAtLocation = provider.typeChecker.getTypeAtLocation(node);
-				// 	const symbolAtLocation = provider.typeChecker.getSymbolAtLocation(node.parent);
-				// 	const transformSymbol = provider.symbols.getSymbolByName("Transform");
-
-				// 	if (typeAtLocation !== undefined) {
-				// 		const startPos = node.getStart();
-				// 		const endPos = node.getEnd() - startPos;
-
-				// 		if (typeAtLocation.symbol === transformSymbol && ts.isPropertyAccessExpression(node.parent)) {
-				// 			diagnostics.push({
-				// 				category: ts.DiagnosticCategory.Warning,
-				// 				file: sourceFile,
-				// 				messageText: `Transform accesses should be cached as a variable. :: Symbol ${
-				// 					symbolAtLocation?.id ?? -1
-				// 				}`,
-				// 				start: startPos,
-				// 				code: 1000000,
-				// 				length: endPos,
-				// 			});
-				// 		}
-				// 	}
-				// }
+				if (ts.isForInStatement(node)) {
+					pushNodeDiagnostic(
+						AirshipCompilerDiagnosticCode.ForInStatementUsage,
+						node,
+						`for-in loop statements are not supported!`,
+					);
+				}
 			});
 
 			airshipBehaviours.forEach(($behaviour) => {
@@ -178,7 +255,7 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 
 						diagnostics.push({
 							category: ts.DiagnosticCategory.Warning,
-							code: AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE + 1,
+							code: AirshipCompilerDiagnosticCode.AirshipBehaviourWarning,
 							file: sourceFile,
 							messageText:
 								"An AirshipBehaviour should not have a constructor, you should instead use the Awake() lifecycle method",
@@ -210,7 +287,7 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 
 					diagnostics.push({
 						category: ts.DiagnosticCategory.Error,
-						code: AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE,
+						code: AirshipCompilerDiagnosticCode.InvalidAirshipBehaviourDeclaration,
 						file: sourceFile,
 						messageText: `AirshipBehaviour '${name}' must have a default or abstract modifier`,
 						start: startPos,
