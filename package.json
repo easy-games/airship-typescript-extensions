@@ -25,7 +25,7 @@
 		"eslint-plugin-prettier": "^3.3.1",
 		"prettier": "^2.2.1",
 		"ts-expose-internals": "^5.5.2",
-		"typescript": "^5.9.2"
+		"typescript": "^5.5.2"
 	},
 	"dependencies": {
 		"@roblox-ts/luau-ast": "^2.0.0",

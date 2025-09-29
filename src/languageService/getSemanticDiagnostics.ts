@@ -81,7 +81,6 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 	// const symbols = new SymbolProvider(provider, provider.typeChecker);
 
 	return (file) => {
-		provider.symbols.update();
 		const diagnostics = service.getSemanticDiagnostics(file);
 		if (config.diagnosticsMode !== "off") {
 			const sourceFile = provider.getSourceFile(file);
