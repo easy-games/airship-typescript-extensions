@@ -44,6 +44,16 @@ export = function init(modules: { typescript: typeof ts }) {
 		serviceProxy["getCompletionsAtPosition"] = getCompletionsAtPositionFactory(provider);
 		serviceProxy["getCompletionEntryDetails"] = getCompletionEntryDetailsFactory(provider);
 
+		serviceProxy["getCompilerOptionsDiagnostics"] = () => {
+			const core = provider.service.getCompilerOptionsDiagnostics();
+
+			for (const diagnostic of provider.diagnostics) {
+				core.push(diagnostic);
+			}
+
+			return core;
+		};
+
 		// Register the codefix.
 		ts.codefix.registerCodeFix({
 			errorCodes: [BOUNDARY_DIAGNOSTIC_CODE, AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE],

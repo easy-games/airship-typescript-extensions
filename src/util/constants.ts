@@ -26,5 +26,6 @@ export function createConstants(info: PluginCreateInfo) {
 
 export const BOUNDARY_DIAGNOSTIC_CODE = 1800000;
 export const AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE = 1800001;
+export const INVALID_ID_CODE = 1800002;
 
 export type Constants = ReturnType<typeof createConstants>;

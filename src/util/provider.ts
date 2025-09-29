@@ -1,8 +1,9 @@
-import type ts from "typescript";
+import ts from "typescript";
 import { createConstants } from "./constants";
 import { expect } from "./functions/expect";
 import { PluginCreateInfo } from "../types";
 import { NetworkBoundary } from "./boundary";
+import { SymbolProvider } from "./symbols";
 
 export class Provider {
 	public constants = createConstants(this.info);
@@ -17,6 +18,8 @@ export class Provider {
 
 	public boundaryCache = new Map<string, NetworkBoundary>();
 
+	public readonly symbols: SymbolProvider;
+
 	constructor(
 		public serviceProxy: ts.LanguageService,
 		public service: ts.LanguageService,
@@ -24,6 +27,7 @@ export class Provider {
 		tsImpl: typeof ts,
 	) {
 		this.ts = tsImpl;
+		this.symbols = new SymbolProvider(this);
 	}
 
 	get program() {
@@ -32,6 +36,35 @@ export class Provider {
 
 	get typeChecker() {
 		return this.program.getTypeChecker();
+	}
+
+	private _diagnostics = new Array<ts.Diagnostic>();
+	get diagnostics(): readonly ts.Diagnostic[] {
+		return this._diagnostics;
+	}
+
+	pushDiagnostic(messageText: string) {
+		this._diagnostics.push({
+			category: ts.DiagnosticCategory.Warning,
+			code: -1,
+			messageText: `[Airship Language Service] ${messageText}`,
+			file: undefined,
+			start: 0,
+			length: 0,
+		});
+	}
+
+	throwDiagnostic(messageText: string): never {
+		this._diagnostics.push({
+			category: ts.DiagnosticCategory.Error,
+			code: -1,
+			messageText: `[Airship Language Service] ${messageText}`,
+			file: undefined,
+			start: 0,
+			length: 0,
+		});
+
+		throw messageText;
 	}
 
 	getSymbolNamed(name: string) {

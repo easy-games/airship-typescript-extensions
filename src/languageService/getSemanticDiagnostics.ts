@@ -1,7 +1,9 @@
 import type ts from "typescript";
-import { AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE } from "../util/constants";
+import { AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE, INVALID_ID_CODE } from "../util/constants";
 import { Provider } from "../util/provider";
 import { getAirshipBehaviours } from "../util/airshipBehaviours";
+import { SymbolProvider } from "util/symbols";
+import luau from "@roblox-ts/luau-ast";
 
 interface ClarifiedDiagnostic {
 	regex: RegExp;
@@ -23,42 +25,151 @@ const CLARIFIED_DIAGNOSTICS: Array<ClarifiedDiagnostic> = [
 	},
 ];
 
+const luauKeywords = [
+	"if",
+	"else",
+	"elseif",
+	"for",
+	"while",
+	"break",
+	"continue",
+	"repeat",
+	"until",
+	"not",
+	"then",
+	"end",
+	"function",
+	"local",
+	"or",
+	"and",
+	"do",
+	"self",
+];
+
+const { game, script, ...globals } = luau.globals;
+
+function isReservedIdentifier(id: string) {
+	return Object.prototype.hasOwnProperty.call(globals, id);
+}
+
+const compilerIdentifiers = [
+	"Server",
+	"Client",
+	"Header",
+	"SerializeField",
+	"NonSerialized",
+	"Tooltip",
+	"Min",
+	"Max",
+	"Multiline",
+	"Spacing",
+	"TextArea",
+	"HideInInspector",
+	"RequireComponent",
+	"AirshipComponentMenu",
+	"AirshipComponentIcon",
+	"InspectorName",
+	"Spacing",
+	"ColorUsage",
+];
+function isShadowingCompilerDecorator(id: string) {
+	return compilerIdentifiers.includes(id);
+}
+
 export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageService["getSemanticDiagnostics"] {
 	const { service, config, ts } = provider;
+	// const symbols = new SymbolProvider(provider, provider.typeChecker);
+
 	return (file) => {
+		provider.symbols.update();
 		const diagnostics = service.getSemanticDiagnostics(file);
 		if (config.diagnosticsMode !== "off") {
-			// const diagnosticsCategory = {
-			// 	["warning"]: ts.DiagnosticCategory.Warning,
-			// 	["error"]: ts.DiagnosticCategory.Error,
-			// 	["message"]: ts.DiagnosticCategory.Message,
-			// }[config.diagnosticsMode];
-			// const currentBoundary = getNetworkBoundary(provider, file);
-			// const sourceFile = provider.getSourceFile(file);
-			// getImports(provider, sourceFile)
-			// 	.filter((x) => !x.typeOnly)
-			// 	.forEach(($import) => {
-			// 		const importBoundary = getNetworkBoundary(provider, $import.absolutePath);
-			// 		if (!boundaryCanSee(currentBoundary, importBoundary)) {
-			// 			orig.push({
-			// 				category: diagnosticsCategory,
-			// 				code: DIAGNOSTIC_CODE,
-			// 				file: sourceFile,
-			// 				messageText: `Cannot import ${importBoundary} module from ${currentBoundary}`,
-			// 				start: $import.start,
-			// 				length: $import.end - $import.start,
-			// 			});
-			// 		}
-			// 	});
-
 			const sourceFile = provider.getSourceFile(file);
 			const airshipBehaviours = getAirshipBehaviours(provider, sourceFile);
 
 			ts.forEachChildRecursively(sourceFile, (node) => {
-				if (ts.isIfStatement(node)) {
-					
+				if (ts.isVariableDeclaration(node) && node.name && ts.isIdentifier(node.name)) {
+					if (!luau.isValidIdentifier(node.name.text)) {
+						const startPos = node.name.getStart();
+						const endPos = node.name.getEnd() - startPos;
+
+						diagnostics.push({
+							category: ts.DiagnosticCategory.Error,
+							file: sourceFile,
+							messageText: luauKeywords.includes(node.name.text)
+								? `${node.name.text} is a Luau keyword and cannot be used as an identifier`
+								: `${node.name.text} is not a valid identifier in Luau`,
+							start: startPos,
+							code: INVALID_ID_CODE,
+							length: endPos,
+						});
+					} else if (isReservedIdentifier(node.name.text)) {
+						const startPos = node.name.getStart();
+						const endPos = node.name.getEnd() - startPos;
+
+						diagnostics.push({
+							category: ts.DiagnosticCategory.Error,
+							file: sourceFile,
+							messageText: `${node.name.text} is a reserved global and cannot be used`,
+							start: startPos,
+							code: INVALID_ID_CODE,
+							length: endPos,
+						});
+					}
 				}
-			})
+
+				if (ts.isFunctionDeclaration(node) && node.name) {
+					if (isReservedIdentifier(node.name.text)) {
+						const startPos = node.name.getStart();
+						const endPos = node.name.getEnd() - startPos;
+
+						diagnostics.push({
+							category: ts.DiagnosticCategory.Error,
+							file: sourceFile,
+							messageText: `${node.name.text} is a reserved global and cannot be used as a function name`,
+							start: startPos,
+							code: INVALID_ID_CODE,
+							length: endPos,
+						});
+					} else if (isShadowingCompilerDecorator(node.name.text)) {
+						const startPos = node.name.getStart();
+						const endPos = node.name.getEnd() - startPos;
+
+						diagnostics.push({
+							category: ts.DiagnosticCategory.Warning,
+							file: sourceFile,
+							messageText: `${node.name.text} is a compiler macro identifier, and should not be used as a function name`,
+							start: startPos,
+							code: INVALID_ID_CODE,
+							length: endPos,
+						});
+					}
+				}
+
+				// if (ts.isPropertyAccessExpression(node)) {
+				// 	const typeAtLocation = provider.typeChecker.getTypeAtLocation(node);
+				// 	const symbolAtLocation = provider.typeChecker.getSymbolAtLocation(node.parent);
+				// 	const transformSymbol = provider.symbols.getSymbolByName("Transform");
+
+				// 	if (typeAtLocation !== undefined) {
+				// 		const startPos = node.getStart();
+				// 		const endPos = node.getEnd() - startPos;
+
+				// 		if (typeAtLocation.symbol === transformSymbol && ts.isPropertyAccessExpression(node.parent)) {
+				// 			diagnostics.push({
+				// 				category: ts.DiagnosticCategory.Warning,
+				// 				file: sourceFile,
+				// 				messageText: `Transform accesses should be cached as a variable. :: Symbol ${
+				// 					symbolAtLocation?.id ?? -1
+				// 				}`,
+				// 				start: startPos,
+				// 				code: 1000000,
+				// 				length: endPos,
+				// 			});
+				// 		}
+				// 	}
+				// }
+			});
 
 			airshipBehaviours.forEach(($behaviour) => {
 				for (const member of $behaviour.node.members) {
