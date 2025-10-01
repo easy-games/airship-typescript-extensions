@@ -1,42 +1,39 @@
 import ts from "typescript";
 import { Provider } from "./provider";
-
-const SYMBOL_NAMES = {
-	Object: "Object",
-	GameObject: "GameObject",
-	Component: "Component",
-	Transform: "Transform",
-};
-
-function getGlobalSymbolByNameOrThrow(typeChecker: ts.TypeChecker, name: string, meaning: ts.SymbolFlags) {
-	const symbol = typeChecker.resolveName(name, undefined, meaning, false);
-	if (symbol) {
-		return symbol;
-	}
-
-	throw new Error(`The types for symbol '${name}' could not be found`);
-}
+import path from "path";
 
 export class SymbolProvider {
-	private symbols = new Map<string, ts.Symbol>();
-	private typeOfSymbol = new Map<string, ts.Type>();
+	$CLIENT: ts.Symbol | undefined;
+	$SERVER: ts.Symbol | undefined;
+	isServerSymbol: ts.Symbol | undefined;
+	isClientSymbol: ts.Symbol | undefined;
 
-	private serverEnvironmentMacro: ts.Symbol | undefined;
-	private clientEnvironmentMacro: ts.Symbol | undefined;
+	public refresh(provider: Provider) {
+		const { typeChecker } = provider;
 
-	private initialized = false;
+		this.$SERVER = this.resolveGlobalSymbol(provider, "$SERVER");
+		this.$CLIENT = this.resolveGlobalSymbol(provider, "$CLIENT");
 
-	public constructor(private readonly provider: Provider) {}
+		const gameModuleFile = provider.getSourceFile("AirshipPackages/@Easy/Core/Shared/Game.ts");
+		if (gameModuleFile) {
+			const gameDeclaration = gameModuleFile.statements.find(
+				(f): f is ts.ClassDeclaration => ts.isClassDeclaration(f) && f.name?.text === "Game",
+			);
 
-	public update() {
-		// const transformSymbol = this.provider.typeChecker.resolveName(
-		// 	"Transform",
-		// 	undefined,
-		// 	ts.SymbolFlags.All,
-		// 	false,
-		// );
-		// if (transformSymbol) this.symbols.set("Transform", transformSymbol);
-		// this.initialized = true;
+			if (gameDeclaration) {
+				const isServer = gameDeclaration.members.find(
+					(f): f is ts.MethodDeclaration & { name: ts.Identifier } =>
+						ts.isMethodDeclaration(f) && ts.isIdentifier(f.name) && f.name.text === "IsServer",
+				);
+				if (isServer) this.isServerSymbol = typeChecker.getSymbolAtLocation(isServer.name);
+
+				const isClient = gameDeclaration.members.find(
+					(f): f is ts.MethodDeclaration & { name: ts.Identifier } =>
+						ts.isMethodDeclaration(f) && ts.isIdentifier(f.name) && f.name.text === "IsClient",
+				);
+				if (isClient) this.isClientSymbol = typeChecker.getSymbolAtLocation(isClient.name);
+			}
+		}
 	}
 
 	// public getSymbolByName(name: keyof typeof SYMBOL_NAMES) {
@@ -57,7 +54,7 @@ export class SymbolProvider {
 	// 	return [...this.symbols.keys()];
 	// }
 
-	public resolveGlobalSymbol(name: string) {
-		return this.provider.typeChecker.resolveName(name, undefined, ts.SymbolFlags.All, false);
+	public resolveGlobalSymbol(provider: Provider, name: string) {
+		return provider.typeChecker.resolveName(name, undefined, ts.SymbolFlags.All, false);
 	}
 }

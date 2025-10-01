@@ -12,6 +12,8 @@ import path from "path";
 interface ModifiedEntry {
 	remove?: boolean;
 	source?: string;
+	macro?: boolean;
+	directive?: boolean;
 	boundary?: NetworkBoundary;
 }
 
@@ -71,10 +73,11 @@ export function getCompletionsAtPositionFactory(provider: Provider): ts.Language
 			source,
 		};
 
-		const serverSymbol = provider.symbols.resolveGlobalSymbol("Server");
-		const clientSymbol = provider.symbols.resolveGlobalSymbol("Client");
+		const serverSymbol = provider.symbols.resolveGlobalSymbol(provider, "Server");
+		const clientSymbol = provider.symbols.resolveGlobalSymbol(provider, "Client");
 
 		const declarations = symbol.getDeclarations() ?? [];
+
 		for (const declaration of declarations) {
 			for (const node of getPossibleMembers(declaration)) {
 				for (const tag of ts.getJSDocTags(node)) {
@@ -107,6 +110,23 @@ export function getCompletionsAtPositionFactory(provider: Provider): ts.Language
 							}
 						}
 					}
+				}
+			}
+		}
+
+		if (symbol.valueDeclaration) {
+			if (ts.isVariableDeclaration(symbol.valueDeclaration)) {
+				const id = symbol.valueDeclaration.name;
+				if (ts.isIdentifier(id)) {
+					// const symbol = provider.symbols.resolveGlobalSymbol(id.text);
+					modifiedEntry.directive = ["$SERVER", "$CLIENT"].includes(id.text);
+				}
+			}
+
+			if (ts.isFunctionDeclaration(symbol.valueDeclaration)) {
+				const id = symbol.valueDeclaration.name;
+				if (id?.text.startsWith("$")) {
+					modifiedEntry.macro = true;
 				}
 			}
 		}
@@ -189,7 +209,7 @@ export function getCompletionsAtPositionFactory(provider: Provider): ts.Language
 	}
 
 	return (file, pos, opt) => {
-		provider.symbols.update();
+		provider.symbols.refresh(provider);
 
 		const fileBoundary = getNetworkBoundary(provider, file);
 		const orig = service.getCompletionsAtPosition(file, pos, opt);
@@ -252,6 +272,12 @@ export function getCompletionsAtPositionFactory(provider: Provider): ts.Language
 						completionEntryLabel.detail = " [Server]";
 						break;
 					case NetworkBoundary.Shared:
+				}
+
+				if (modification.directive) {
+					completionEntryLabel.description = " Airship Directive";
+				} else if (modification.macro) {
+					completionEntryLabel.description = " Airship Macro";
 				}
 
 				entries.push(completionEntry);

@@ -8,8 +8,8 @@ export function getNetworkBoundaryOfMethod(provider: Provider, node: ts.MethodDe
 	const decorators = node.modifiers?.filter((f) => ts.isDecorator(f));
 	if (!decorators) return NetworkBoundary.Shared;
 
-	const serverSymbol = provider.symbols.resolveGlobalSymbol("Server");
-	const clientSymbol = provider.symbols.resolveGlobalSymbol("Client");
+	const serverSymbol = provider.symbols.resolveGlobalSymbol(provider, "Server");
+	const clientSymbol = provider.symbols.resolveGlobalSymbol(provider, "Client");
 
 	for (const decorator of decorators) {
 		if (ts.isCallExpression(decorator.expression) && ts.isIdentifier(decorator.expression.expression)) {

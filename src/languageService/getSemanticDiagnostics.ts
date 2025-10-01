@@ -84,10 +84,12 @@ export interface AirshipCompilerDiagnostic extends ts.Diagnostic {
 }
 
 export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageService["getSemanticDiagnostics"] {
-	const { service, config, ts } = provider;
+	const { symbols, service, config, ts } = provider;
 	// const symbols = new SymbolProvider(provider, provider.typeChecker);
 
 	return (file) => {
+		symbols.refresh(provider);
+
 		const diagnostics = service.getSemanticDiagnostics(file);
 		const sourceFile = provider.getSourceFile(file);
 

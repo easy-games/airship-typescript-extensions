@@ -27,7 +27,7 @@ export class Provider {
 		tsImpl: typeof ts,
 	) {
 		this.ts = tsImpl;
-		this.symbols = new SymbolProvider(this);
+		this.symbols = new SymbolProvider();
 	}
 
 	get program() {

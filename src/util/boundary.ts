@@ -6,6 +6,7 @@ export enum NetworkBoundary {
 	Client = "Client",
 	Server = "Server",
 	Shared = "Shared",
+	Invalid = "Invalid",
 }
 
 /**

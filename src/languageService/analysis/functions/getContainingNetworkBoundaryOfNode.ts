@@ -5,7 +5,7 @@ import { getNetworkBoundaryOfMethod } from "./getNetworkBoundaryOfMethod";
 import { parseDirectives } from "./parseDirectives";
 
 function* visitParentNodes(node: ts.Node) {
-	let current = node;
+	let current = node.parent;
 
 	do {
 		yield current;
@@ -16,7 +16,12 @@ function* visitParentNodes(node: ts.Node) {
 export function getContainingNetworkBoundaryOfNode(provider: Provider, node: ts.Node) {
 	for (const parentNode of visitParentNodes(node)) {
 		if (ts.isIfStatement(parentNode)) {
-			const result = parseDirectives(provider, parentNode.expression);
+			const result = parseDirectives(provider, parentNode.expression, true, true);
+
+			if (result?.isServer && result.isClient) {
+				return NetworkBoundary.Invalid;
+			}
+
 			if (result?.isServer) {
 				return NetworkBoundary.Server;
 			}
@@ -28,7 +33,6 @@ export function getContainingNetworkBoundaryOfNode(provider: Provider, node: ts.
 
 		if (ts.isMethodDeclaration(parentNode)) {
 			const boundary = getNetworkBoundaryOfMethod(provider, parentNode);
-			provider.log("check method boundary", parentNode.getText(), boundary);
 			return boundary;
 		}
 	}
