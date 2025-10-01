@@ -2,7 +2,7 @@ import type ts from "typescript";
 import { Provider } from "../util/provider";
 import { normalizeType } from "../util/functions/normalizeType";
 import { isNodeInternal } from "../util/functions/isNodeInternal";
-import { boundaryCanSee, getNetworkBoundary, NetworkBoundary } from "../util/boundary";
+import { getNetworkBoundary, NetworkBoundary } from "../util/boundary";
 import { findPrecedingType } from "../util/functions/findPrecedingType";
 import { getWithDefault } from "../util/functions/getOrDefault";
 import { getBoundaryAtPosition } from "../util/functions/getBoundaryAtPosition";
@@ -71,6 +71,9 @@ export function getCompletionsAtPositionFactory(provider: Provider): ts.Language
 			source,
 		};
 
+		const serverSymbol = provider.symbols.resolveGlobalSymbol("Server");
+		const clientSymbol = provider.symbols.resolveGlobalSymbol("Client");
+
 		const declarations = symbol.getDeclarations() ?? [];
 		for (const declaration of declarations) {
 			for (const node of getPossibleMembers(declaration)) {
@@ -84,6 +87,26 @@ export function getCompletionsAtPositionFactory(provider: Provider): ts.Language
 					if (name === "server") modifiedEntry.boundary = NetworkBoundary.Server;
 					if (name === "client") modifiedEntry.boundary = NetworkBoundary.Client;
 					if (name === "shared") modifiedEntry.boundary = NetworkBoundary.Shared;
+				}
+
+				if (provider.config.networkBoundaryInfo && ts.isMethodDeclaration(node) && node.modifiers) {
+					const decorators = node.modifiers.filter((f) => ts.isDecorator(f));
+					for (const decorator of decorators) {
+						if (
+							ts.isCallExpression(decorator.expression) &&
+							ts.isIdentifier(decorator.expression.expression)
+						) {
+							const symbolAtLocation = provider.typeChecker.getSymbolAtLocation(
+								decorator.expression.expression,
+							);
+
+							if (symbolAtLocation === serverSymbol) {
+								modifiedEntry.boundary = NetworkBoundary.Server;
+							} else if (symbolAtLocation === clientSymbol) {
+								modifiedEntry.boundary = NetworkBoundary.Client;
+							}
+						}
+					}
 				}
 			}
 		}
@@ -166,6 +189,8 @@ export function getCompletionsAtPositionFactory(provider: Provider): ts.Language
 	}
 
 	return (file, pos, opt) => {
+		provider.symbols.update();
+
 		const fileBoundary = getNetworkBoundary(provider, file);
 		const orig = service.getCompletionsAtPosition(file, pos, opt);
 		if (orig) {
@@ -201,24 +226,35 @@ export function getCompletionsAtPositionFactory(provider: Provider): ts.Language
 				}
 			}
 			const entries: ts.CompletionEntry[] = [];
-			orig.entries.forEach((v) => {
-				const modifiers = v.kindModifiers;
-				const modification = modifiedEntries.get(v.name)?.find((entry) => entry.source === v.source) ?? {};
+			orig.entries.forEach((completionEntry) => {
+				const modifiers = completionEntry.kindModifiers;
+				const modification =
+					modifiedEntries
+						.get(completionEntry.name)
+						?.find((entry) => entry.source === completionEntry.source) ?? {};
 				if (modifiers?.includes("deprecated") && config.hideDeprecated) return;
 				if (modification.remove) return;
 
-				const isImport = isAutoImport(v);
+				const isImport = isAutoImport(completionEntry);
 				const boundaryAtContext = isImport ? fileBoundary : scopeBoundary;
 				const completionBoundary =
-					modification.boundary ?? getNetworkBoundary(provider, getCompletionSource(v));
-				// if (boundaryAtContext && !boundaryCanSee(boundaryAtContext, completionBoundary)) {
-				// 	if (config.mode === "prefix") {
-				// 		v.insertText = v.name;
-				// 		v.name = completionBoundary + ": " + v.name;
-				// 	} else if (config.mode === "remove") return;
-				// }
+					modification.boundary ?? getNetworkBoundary(provider, getCompletionSource(completionEntry));
 
-				entries.push(v);
+				const completionEntryLabel = (completionEntry.labelDetails ??= {});
+
+				switch (completionBoundary) {
+					case NetworkBoundary.Client:
+						completionEntryLabel.detail = " [Client]";
+						completionEntry.sortText = "0Client:" + completionEntry.sortText;
+						break;
+					case NetworkBoundary.Server:
+						completionEntry.sortText = "0Server:" + completionEntry.sortText;
+						completionEntryLabel.detail = " [Server]";
+						break;
+					case NetworkBoundary.Shared:
+				}
+
+				entries.push(completionEntry);
 			});
 			orig.entries = entries;
 		}

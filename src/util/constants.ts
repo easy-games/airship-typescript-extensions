@@ -39,6 +39,7 @@ export const enum AirshipCompilerDiagnosticCode {
 	UnsupportedFeature,
 	InvalidEquality,
 	InvalidInverseEquality,
+	NetworkBoundaryMismatch,
 }
 
 export type Constants = ReturnType<typeof createConstants>;

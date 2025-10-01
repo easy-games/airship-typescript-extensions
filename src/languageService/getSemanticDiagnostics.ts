@@ -3,6 +3,10 @@ import { AirshipCompilerDiagnosticCode } from "../util/constants";
 import { Provider } from "../util/provider";
 import { getAirshipBehaviours } from "../util/airshipBehaviours";
 import luau from "@roblox-ts/luau-ast";
+import { isMethodCall } from "./analysis/functions/isMethodCall";
+import { getNetworkBoundaryOfMethod } from "./analysis/functions/getNetworkBoundaryOfMethod";
+import { getContainingNetworkBoundaryOfNode } from "./analysis/functions/getContainingNetworkBoundaryOfNode";
+import { NetworkBoundary } from "../util/boundary";
 
 interface ClarifiedDiagnostic {
 	regex: RegExp;
@@ -111,139 +115,160 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 			const airshipBehaviours = getAirshipBehaviours(provider, sourceFile);
 
 			ts.forEachChildRecursively(sourceFile, (node) => {
-				// typeof
-				if (ts.isTypeOfExpression(node)) {
-					pushNodeDiagnostic(
-						AirshipCompilerDiagnosticCode.NoTypeOfNode,
-						node,
-						`typeof operator is not supported - use typeOf or typeIs!`,
-					);
-				}
-
-				if (ts.isPrivateIdentifier(node)) {
-					pushNodeDiagnostic(
-						AirshipCompilerDiagnosticCode.UnsupportedFeature,
-						node,
-						`private identifiers are not supported!`,
-					);
-				}
-
-				if (ts.isBinaryExpression(node) && ts.isEqualityOperatorKind(node.operatorToken.kind)) {
-					if (node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken) {
+				if (provider.config.showCompilerErrors) {
+					// typeof
+					if (ts.isTypeOfExpression(node)) {
 						pushNodeDiagnostic(
-							AirshipCompilerDiagnosticCode.InvalidEquality,
+							AirshipCompilerDiagnosticCode.NoTypeOfNode,
 							node,
-							`operator \`==\` is not supported! use \`===\``,
+							`typeof operator is not supported - use typeOf or typeIs!`,
 						);
-					} else if (node.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken) {
+					}
+
+					if (ts.isPrivateIdentifier(node)) {
 						pushNodeDiagnostic(
-							AirshipCompilerDiagnosticCode.InvalidInverseEquality,
+							AirshipCompilerDiagnosticCode.UnsupportedFeature,
 							node,
-							`operator \`!=\` is not supported! use \`!==\``,
+							`private identifiers are not supported!`,
 						);
 					}
-				}
 
-				if (ts.isDebuggerStatement(node)) {
-					pushNodeDiagnostic(
-						AirshipCompilerDiagnosticCode.UnsupportedFeature,
-						node,
-						`debugger is not supported!`,
-					);
-				}
+					if (ts.isBinaryExpression(node) && ts.isEqualityOperatorKind(node.operatorToken.kind)) {
+						if (node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken) {
+							pushNodeDiagnostic(
+								AirshipCompilerDiagnosticCode.InvalidEquality,
+								node,
+								`operator \`==\` is not supported! use \`===\``,
+							);
+						} else if (node.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken) {
+							pushNodeDiagnostic(
+								AirshipCompilerDiagnosticCode.InvalidInverseEquality,
+								node,
+								`operator \`!=\` is not supported! use \`!==\``,
+							);
+						}
+					}
 
-				if (node.kind === ts.SyntaxKind.NullKeyword) {
-					pushNodeDiagnostic(
-						AirshipCompilerDiagnosticCode.UnsupportedFeature,
-						node,
-						`\`null\` is not supported, use \`undefined\`!`,
-					);
-				}
-
-				if (ts.isLabeledStatement(node)) {
-					pushNodeDiagnostic(
-						AirshipCompilerDiagnosticCode.UnsupportedFeature,
-						node,
-						`labels are not supported!`,
-					);
-				}
-
-				if (ts.isVariableDeclaration(node) && ts.isVarUsing(node)) {
-					pushNodeDiagnostic(
-						AirshipCompilerDiagnosticCode.UnsupportedFeature,
-						node.parent,
-						`using declarations are not supported!`,
-					);
-				}
-
-				if (ts.isExpression(node) && ts.isCommaExpression(node)) {
-					pushNodeDiagnostic(
-						AirshipCompilerDiagnosticCode.UnsupportedFeature,
-						node,
-						`operator \`,\` is not supported!`,
-					);
-				}
-
-				if (ts.isPropertyAccessExpression(node)) {
-					const typeAtLocation = provider.typeChecker.getSymbolAtLocation(node);
-					if (
-						typeAtLocation?.valueDeclaration &&
-						ts.isMethodDeclaration(typeAtLocation.valueDeclaration) &&
-						!ts.isCallExpression(node.parent)
-					) {
+					if (ts.isDebuggerStatement(node)) {
 						pushNodeDiagnostic(
-							AirshipCompilerDiagnosticCode.IndexingMethodWithoutCalling,
+							AirshipCompilerDiagnosticCode.UnsupportedFeature,
 							node,
-							`Cannot index a method without calling it!`,
+							`debugger is not supported!`,
+						);
+					}
+
+					if (node.kind === ts.SyntaxKind.NullKeyword) {
+						pushNodeDiagnostic(
+							AirshipCompilerDiagnosticCode.UnsupportedFeature,
+							node,
+							`\`null\` is not supported, use \`undefined\`!`,
+						);
+					}
+
+					if (ts.isLabeledStatement(node)) {
+						pushNodeDiagnostic(
+							AirshipCompilerDiagnosticCode.UnsupportedFeature,
+							node,
+							`labels are not supported!`,
+						);
+					}
+
+					if (ts.isVariableDeclaration(node) && ts.isVarUsing(node)) {
+						pushNodeDiagnostic(
+							AirshipCompilerDiagnosticCode.UnsupportedFeature,
+							node.parent,
+							`using declarations are not supported!`,
+						);
+					}
+
+					if (ts.isExpression(node) && ts.isCommaExpression(node)) {
+						pushNodeDiagnostic(
+							AirshipCompilerDiagnosticCode.UnsupportedFeature,
+							node,
+							`operator \`,\` is not supported!`,
+						);
+					}
+
+					if (ts.isPropertyAccessExpression(node)) {
+						const typeAtLocation = provider.typeChecker.getSymbolAtLocation(node);
+						if (
+							typeAtLocation?.valueDeclaration &&
+							ts.isMethodDeclaration(typeAtLocation.valueDeclaration) &&
+							!ts.isCallExpression(node.parent)
+						) {
+							pushNodeDiagnostic(
+								AirshipCompilerDiagnosticCode.IndexingMethodWithoutCalling,
+								node,
+								`Cannot index a method without calling it!`,
+							);
+						}
+					}
+
+					// Variables with invalid Luau keyword/identifier names
+					if (ts.isVariableDeclaration(node) && node.name && ts.isIdentifier(node.name)) {
+						if (!luau.isValidIdentifier(node.name.text)) {
+							pushNodeDiagnostic(
+								AirshipCompilerDiagnosticCode.InvalidIdentifier,
+								node.name,
+								luauKeywords.includes(node.name.text)
+									? `${node.name.text} is a Luau keyword and cannot be used as an identifier`
+									: `${node.name.text} is not a valid identifier in Luau`,
+							);
+						} else if (isReservedIdentifier(node.name.text)) {
+							pushNodeDiagnostic(
+								AirshipCompilerDiagnosticCode.InvalidIdentifier,
+								node.name,
+								`${node.name.text} is a reserved global and cannot be used`,
+							);
+						}
+					}
+
+					/**
+					 * Function declarations with invalid identifier names or Luau keywords
+					 */
+					if (ts.isFunctionDeclaration(node) && node.name) {
+						if (isReservedIdentifier(node.name.text)) {
+							pushNodeDiagnostic(
+								AirshipCompilerDiagnosticCode.InvalidIdentifier,
+								node.name,
+								`${node.name.text} is a reserved global and cannot be used as a function name`,
+							);
+						} else if (isShadowingCompilerDecorator(node.name.text)) {
+							pushNodeDiagnostic(
+								AirshipCompilerDiagnosticCode.InvalidIdentifier,
+								node.name,
+								`${node.name.text} is a compiler macro identifier, and should not be used as a function name`,
+								ts.DiagnosticCategory.Warning,
+							);
+						}
+					}
+
+					if (ts.isForInStatement(node)) {
+						pushNodeDiagnostic(
+							AirshipCompilerDiagnosticCode.ForInStatementUsage,
+							node,
+							`for-in loop statements are not supported!`,
 						);
 					}
 				}
 
-				// Variables with invalid Luau keyword/identifier names
-				if (ts.isVariableDeclaration(node) && node.name && ts.isIdentifier(node.name)) {
-					if (!luau.isValidIdentifier(node.name.text)) {
-						pushNodeDiagnostic(
-							AirshipCompilerDiagnosticCode.InvalidIdentifier,
-							node.name,
-							luauKeywords.includes(node.name.text)
-								? `${node.name.text} is a Luau keyword and cannot be used as an identifier`
-								: `${node.name.text} is not a valid identifier in Luau`,
-						);
-					} else if (isReservedIdentifier(node.name.text)) {
-						pushNodeDiagnostic(
-							AirshipCompilerDiagnosticCode.InvalidIdentifier,
-							node.name,
-							`${node.name.text} is a reserved global and cannot be used`,
-						);
-					}
-				}
+				if (provider.config.networkBoundaryCheck === "warning") {
+					if (ts.isCallExpression(node) /* && isMethodCall(provider.typeChecker, node) */) {
+						const symbol = provider.typeChecker.getSymbolAtLocation(node.expression);
+						if (symbol?.valueDeclaration && ts.isMethodDeclaration(symbol.valueDeclaration)) {
+							const callContext = getNetworkBoundaryOfMethod(provider, symbol.valueDeclaration);
+							const parentContext = getContainingNetworkBoundaryOfNode(provider, node.expression);
 
-				/**
-				 * Function declarations with invalid identifier names or Luau keywords
-				 */
-				if (ts.isFunctionDeclaration(node) && node.name) {
-					if (isReservedIdentifier(node.name.text)) {
-						pushNodeDiagnostic(
-							AirshipCompilerDiagnosticCode.InvalidIdentifier,
-							node.name,
-							`${node.name.text} is a reserved global and cannot be used as a function name`,
-						);
-					} else if (isShadowingCompilerDecorator(node.name.text)) {
-						pushNodeDiagnostic(
-							AirshipCompilerDiagnosticCode.InvalidIdentifier,
-							node.name,
-							`${node.name.text} is a compiler macro identifier, and should not be used as a function name`,
-							ts.DiagnosticCategory.Warning,
-						);
+							if (callContext !== NetworkBoundary.Shared && callContext !== parentContext) {
+								pushNodeDiagnostic(
+									AirshipCompilerDiagnosticCode.NetworkBoundaryMismatch,
+									node,
+									`Method ${symbol.valueDeclaration.name.getText()} is marked ${callContext}-only, however is being called in ${parentContext} context.`,
+									ts.DiagnosticCategory.Warning,
+								);
+							}
+						}
 					}
-				}
-
-				if (ts.isForInStatement(node)) {
-					pushNodeDiagnostic(
-						AirshipCompilerDiagnosticCode.ForInStatementUsage,
-						node,
-						`for-in loop statements are not supported!`,
-					);
 				}
 			});
 

@@ -18,6 +18,9 @@ import { getCompletionsAtPositionFactory } from "./languageService/getCompletion
 import { getSemanticDiagnosticsFactory } from "./languageService/getSemanticDiagnostics";
 import { getCodeFixesAtPositionFactory } from "./languageService/getCodeFixesAtPosition";
 import { getCompletionEntryDetailsFactory } from "./languageService/getCompletionEntryDetails";
+import {} from "./languageService/analysis/functions/getContainingNetworkBoundaryOfNode";
+import {} from "./languageService/analysis/functions/getNetworkBoundaryOfMethod";
+import {} from "./languageService/analysis/functions/isMethodCall";
 import { isAirshipProject } from "./util/functions/isAirshipProject";
 
 const AIRSHIP_MARKER = "_airship_marker_service";
@@ -47,6 +50,46 @@ export = function init(modules: { typescript: typeof ts }) {
 		serviceProxy["getCodeFixesAtPosition"] = getCodeFixesAtPositionFactory(provider);
 		serviceProxy["getCompletionsAtPosition"] = getCompletionsAtPositionFactory(provider);
 		serviceProxy["getCompletionEntryDetails"] = getCompletionEntryDetailsFactory(provider);
+		serviceProxy["getQuickInfoAtPosition"] = (fileName, position) => {
+			const info = provider.service.getQuickInfoAtPosition(fileName, position);
+			if (!info) return undefined;
+
+			const sourceFile = provider.getSourceFile(fileName);
+			const node = ts.getTokenAtPosition(sourceFile, position);
+			const symbol = provider.typeChecker.getSymbolAtLocation(node);
+
+			if (symbol && symbol.valueDeclaration && ts.isMethodDeclaration(symbol.valueDeclaration)) {
+				const serverDecorator = symbol.valueDeclaration.modifiers
+					?.filter((f) => ts.isDecorator(f))
+					.find((f) => {
+						return (
+							ts.isCallExpression(f.expression) &&
+							ts.isIdentifier(f.expression.expression) &&
+							["Server", "Client"].includes(f.expression.expression.text)
+						);
+					});
+
+				if (serverDecorator) {
+					const text = ((serverDecorator.expression as ts.CallExpression).expression as ts.Identifier).text;
+					(info.tags ??= []).push({
+						name: text,
+						text: [
+							{
+								text: text + "-only method",
+								kind: "className",
+							},
+						],
+					});
+				}
+			}
+
+			// (info.displayParts ??= []).push({
+			// 	text: "Test",
+			// 	kind: "text",
+			// });
+
+			return info;
+		};
 
 		serviceProxy["getCompilerOptionsDiagnostics"] = () => {
 			const core = provider.service.getCompilerOptionsDiagnostics();
