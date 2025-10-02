@@ -3,7 +3,7 @@ import { NetworkBoundary } from "../../../util/boundary";
 import { Provider } from "../../../util/provider";
 
 export function getNetworkBoundaryOfMethod(provider: Provider, node: ts.MethodDeclaration): NetworkBoundary {
-	const ts = provider.ts;
+	const { ts } = provider;
 
 	const decorators = node.modifiers?.filter((f) => ts.isDecorator(f));
 	if (!decorators) return NetworkBoundary.Shared;

@@ -5,7 +5,7 @@
 "use strict";
 
 import {} from "ts-expose-internals";
-import ts from "typescript";
+import type ts from "typescript";
 import { createProxy } from "./util/functions/createProxy";
 import { Provider } from "./util/provider";
 import {

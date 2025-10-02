@@ -1,4 +1,4 @@
-import ts from "typescript";
+import type ts from "typescript";
 import { Provider } from "../../../util/provider";
 import {
 	CompilerDirective,
@@ -20,8 +20,11 @@ export interface DirectivesAnalysisResult {
 	readonly isClient: boolean;
 }
 
-function isAndBinaryExpression(expression: ts.Expression): expression is ts.BinaryExpression {
-	return ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken;
+function isAndBinaryExpression(provider: Provider, expression: ts.Expression): expression is ts.BinaryExpression {
+	return (
+		provider.ts.isBinaryExpression(expression) &&
+		expression.operatorToken.kind === provider.ts.SyntaxKind.AmpersandAmpersandToken
+	);
 }
 
 /**
@@ -53,10 +56,10 @@ export function parseDirectives(
 		}
 	}
 
-	if (allowComplexExpressions && isAndBinaryExpression(conditionLikeExpression)) {
+	if (allowComplexExpressions && isAndBinaryExpression(state, conditionLikeExpression)) {
 		let { left, right } = conditionLikeExpression;
 
-		if (isAndBinaryExpression(left)) {
+		if (isAndBinaryExpression(state, left)) {
 			do {
 				if (
 					isIdentifierOrExclamationIdentifier(left) ||
@@ -72,7 +75,7 @@ export function parseDirectives(
 
 				right = left.right;
 				left = left.left;
-			} while (isAndBinaryExpression(left));
+			} while (isAndBinaryExpression(state, left));
 		} else {
 			if (
 				isIdentifierOrExclamationIdentifier(left) ||

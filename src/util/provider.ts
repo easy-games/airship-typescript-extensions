@@ -1,4 +1,4 @@
-import ts from "typescript";
+import type ts from "typescript";
 import { createConstants } from "./constants";
 import { expect } from "./functions/expect";
 import { PluginCreateInfo } from "../types";
@@ -45,7 +45,7 @@ export class Provider {
 
 	pushDiagnostic(messageText: string) {
 		this._diagnostics.push({
-			category: ts.DiagnosticCategory.Warning,
+			category: this.ts.DiagnosticCategory.Warning,
 			code: -1,
 			messageText: `[Airship Language Service] ${messageText}`,
 			file: undefined,
@@ -56,7 +56,7 @@ export class Provider {
 
 	throwDiagnostic(messageText: string): never {
 		this._diagnostics.push({
-			category: ts.DiagnosticCategory.Error,
+			category: this.ts.DiagnosticCategory.Error,
 			code: -1,
 			messageText: `[Airship Language Service] ${messageText}`,
 			file: undefined,

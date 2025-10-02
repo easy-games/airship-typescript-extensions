@@ -1,4 +1,4 @@
-import ts from "typescript";
+import type ts from "typescript";
 import { Provider } from "../../../util/provider";
 
 export function isMethodCall(provider: Provider, callExpression: ts.CallExpression) {

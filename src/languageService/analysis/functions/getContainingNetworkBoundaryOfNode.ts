@@ -1,4 +1,4 @@
-import ts from "typescript";
+import type ts from "typescript";
 import { NetworkBoundary } from "../../../util/boundary";
 import { Provider } from "../../../util/provider";
 import { getNetworkBoundaryOfMethod } from "./getNetworkBoundaryOfMethod";
@@ -14,6 +14,8 @@ function* visitParentNodes(node: ts.Node) {
 }
 
 export function getContainingNetworkBoundaryOfNode(provider: Provider, node: ts.Node) {
+	const { ts } = provider;
+
 	for (const parentNode of visitParentNodes(node)) {
 		if (ts.isIfStatement(parentNode)) {
 			const result = parseDirectives(provider, parentNode.expression, true, true);

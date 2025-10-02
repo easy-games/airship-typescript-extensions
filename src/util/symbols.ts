@@ -1,4 +1,4 @@
-import ts from "typescript";
+import type ts from "typescript";
 import { Provider } from "./provider";
 import path from "path";
 
@@ -9,7 +9,7 @@ export class SymbolProvider {
 	isClientSymbol: ts.Symbol | undefined;
 
 	public refresh(provider: Provider) {
-		const { typeChecker } = provider;
+		const { typeChecker, ts } = provider;
 
 		this.$SERVER = this.resolveGlobalSymbol(provider, "$SERVER");
 		this.$CLIENT = this.resolveGlobalSymbol(provider, "$CLIENT");
@@ -55,6 +55,6 @@ export class SymbolProvider {
 	// }
 
 	public resolveGlobalSymbol(provider: Provider, name: string) {
-		return provider.typeChecker.resolveName(name, undefined, ts.SymbolFlags.All, false);
+		return provider.typeChecker.resolveName(name, undefined, provider.ts.SymbolFlags.All, false);
 	}
 }
