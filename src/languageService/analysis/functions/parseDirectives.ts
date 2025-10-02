@@ -33,7 +33,7 @@ function isAndBinaryExpression(provider: Provider, expression: ts.Expression): e
  * @returns Updated expression, or false if consumed, undefined if invalid
  */
 export function parseDirectives(
-	state: Provider,
+	provider: Provider,
 	conditionLikeExpression: ts.Expression,
 	allowComplexExpressions = true,
 	includeImplicitCalls = true,
@@ -41,10 +41,10 @@ export function parseDirectives(
 	const directives = new Array<CompilerDirective>();
 
 	if (
-		isIdentifierOrExclamationIdentifier(conditionLikeExpression) ||
-		isCallExpressionOrExclamationCallExpression(conditionLikeExpression)
+		isIdentifierOrExclamationIdentifier(provider, conditionLikeExpression) ||
+		isCallExpressionOrExclamationCallExpression(provider, conditionLikeExpression)
 	) {
-		const directive = getDirective(state, conditionLikeExpression, includeImplicitCalls);
+		const directive = getDirective(provider, conditionLikeExpression, includeImplicitCalls);
 		if (directive !== undefined) {
 			directives.push(directive);
 			return {
@@ -56,16 +56,16 @@ export function parseDirectives(
 		}
 	}
 
-	if (allowComplexExpressions && isAndBinaryExpression(state, conditionLikeExpression)) {
+	if (allowComplexExpressions && isAndBinaryExpression(provider, conditionLikeExpression)) {
 		let { left, right } = conditionLikeExpression;
 
-		if (isAndBinaryExpression(state, left)) {
+		if (isAndBinaryExpression(provider, left)) {
 			do {
 				if (
-					isIdentifierOrExclamationIdentifier(left) ||
-					(includeImplicitCalls && isCallExpressionOrExclamationCallExpression(left))
+					isIdentifierOrExclamationIdentifier(provider, left) ||
+					(includeImplicitCalls && isCallExpressionOrExclamationCallExpression(provider, left))
 				) {
-					const directive = getDirective(state, left, includeImplicitCalls);
+					const directive = getDirective(provider, left, includeImplicitCalls);
 
 					if (directive !== undefined) {
 						directives.push(directive);
@@ -75,13 +75,13 @@ export function parseDirectives(
 
 				right = left.right;
 				left = left.left;
-			} while (isAndBinaryExpression(state, left));
+			} while (isAndBinaryExpression(provider, left));
 		} else {
 			if (
-				isIdentifierOrExclamationIdentifier(left) ||
-				(includeImplicitCalls && isCallExpressionOrExclamationCallExpression(left))
+				isIdentifierOrExclamationIdentifier(provider, left) ||
+				(includeImplicitCalls && isCallExpressionOrExclamationCallExpression(provider, left))
 			) {
-				const directive = getDirective(state, left, includeImplicitCalls);
+				const directive = getDirective(provider, left, includeImplicitCalls);
 
 				if (directive !== undefined) {
 					directives.push(directive);
@@ -90,10 +90,10 @@ export function parseDirectives(
 		}
 
 		if (
-			isIdentifierOrExclamationIdentifier(right) ||
-			(includeImplicitCalls && isCallExpressionOrExclamationCallExpression(right))
+			isIdentifierOrExclamationIdentifier(provider, right) ||
+			(includeImplicitCalls && isCallExpressionOrExclamationCallExpression(provider, right))
 		) {
-			const directive = getDirective(state, right, includeImplicitCalls);
+			const directive = getDirective(provider, right, includeImplicitCalls);
 
 			if (directive !== undefined) {
 				directives.push(directive);
