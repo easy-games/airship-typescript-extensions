@@ -4,6 +4,8 @@ import { Provider } from "../util/provider";
 import { findAirshipBehaviour } from "../util/airshipBehaviours";
 import { AirshipCompilerDiagnostic } from "./getSemanticDiagnostics";
 import { NetworkBoundary } from "../util/boundary";
+import { findAncestorNode } from "./analysis/functions/getContainingNetworkBoundaryOfNode";
+import { createPrinter, factory } from "typescript";
 
 export function getCodeFixesAtPositionFactory(provider: Provider): ts.LanguageService["getCodeFixesAtPosition"] {
 	const { service, serviceProxy, ts } = provider;
@@ -12,11 +14,6 @@ export function getCodeFixesAtPositionFactory(provider: Provider): ts.LanguageSe
 		let orig = [...service.getCodeFixesAtPosition(file, start, end, codes, formatOptions, preferences)];
 
 		serviceProxy.getSemanticDiagnostics(file).forEach((diagnostic) => {
-			/*
-				if (diagnostic.start !== undefined && diagnostic.length !== undefined) {
-					if (start >= diagnostic.start && end <= diagnostic.start + diagnostic.length) {
-					*/
-
 			if (diagnostic.start === undefined || diagnostic.length === undefined) return;
 			if (start < diagnostic.start || end > diagnostic.start + diagnostic.length) return;
 
@@ -136,32 +133,121 @@ export function getCodeFixesAtPositionFactory(provider: Provider): ts.LanguageSe
 					});
 				}
 
+				const contextLabel =
+					nodeBoundary === NetworkBoundary.Server
+						? "Server"
+						: nodeBoundary === NetworkBoundary.Client
+						? "Client"
+						: undefined;
+
+				if (!contextLabel) return;
+
 				if (parentBoundary === NetworkBoundary.Shared) {
 					const span = ts.createTextSpan(node.getStart(), 0);
 
-					const expr =
-						nodeBoundary === NetworkBoundary.Server
-							? "Server"
-							: nodeBoundary === NetworkBoundary.Client
-							? "Client"
-							: undefined;
-
-					if (expr) {
+					const expressionStatement = findAncestorNode(
+						node,
+						ts.isExpressionStatement,
+						(cNode) =>
+							ts.isCallExpression(cNode) ||
+							ts.isConditionalExpression(node) ||
+							(ts.isIfStatement(cNode) &&
+								(cNode.expression === node || node.expression.getChildren().includes(node))), // no nesting inside if statements
+					);
+					if (contextLabel && expressionStatement) {
 						orig.push({
 							fixName: "fixBoundaryWithDirectiveWrap",
-							description: `Add ${expr} check before statement`,
+							description: `Add ${contextLabel} check before statement`,
 							changes: [
 								{
 									fileName: file,
 									textChanges: [
 										{
-											newText: `if ($${expr.toUpperCase()}) `,
+											newText: `if ($${contextLabel.toUpperCase()}) `,
 											span,
 										},
 									],
 								},
 							],
 						});
+					}
+
+					if (ts.isCallExpression(node)) {
+						const parentVariableDeclaration = findAncestorNode(
+							node,
+							(node) => ts.isVariableDeclaration(node) || ts.isCallExpression(node),
+							(cNode) => ts.isExpressionStatement(cNode),
+						);
+
+						const callType = provider.typeChecker.getResolvedSignature(node);
+
+						if (parentVariableDeclaration && contextLabel && callType) {
+							const returnType = callType.getReturnType();
+							if (returnType.isNullableType()) {
+								const span = ts.createTextSpan(node.getStart(), node.getEnd() - node.getStart());
+
+								const printer = createPrinter({});
+								const conditionExpression = factory.createConditionalExpression(
+									factory.createIdentifier(`$${contextLabel.toUpperCase()}`),
+									factory.createToken(ts.SyntaxKind.QuestionToken),
+									node,
+									factory.createToken(ts.SyntaxKind.ColonToken),
+									factory.createIdentifier("undefined"),
+								);
+
+								orig.push({
+									fixName: "fixWithConditionalExpression",
+									description: `Wrap in ${contextLabel} conditional expression`,
+									changes: [
+										{
+											fileName: file,
+											textChanges: [
+												{
+													newText: printer.printNode(
+														ts.EmitHint.Expression,
+														conditionExpression,
+														conditionExpression.getSourceFile(),
+													),
+													span,
+												},
+											],
+										},
+									],
+								});
+							}
+						} else {
+							const ifStatement = findAncestorNode(node, ts.isIfStatement, ts.isBinaryExpression);
+							if (ifStatement && contextLabel) {
+								const span = ts.createTextSpan(node.getStart(), node.getEnd() - node.getStart());
+
+								const printer = createPrinter({});
+								const condition = factory.createBinaryExpression(
+									factory.createIdentifier(`$${contextLabel.toUpperCase()}`),
+									ts.SyntaxKind.AmpersandAmpersandToken,
+									node,
+								);
+
+								orig.push({
+									fixName: "fixWithIfDirectiveCheck",
+									description: `Add ${contextLabel} check to if statement`,
+									changes: [
+										{
+											fileName: file,
+											textChanges: [
+												{
+													newText: printer.printNode(
+														ts.EmitHint.Expression,
+														condition,
+														condition.getSourceFile(),
+													),
+													span,
+												},
+											],
+										},
+									],
+								});
+							}
+						}
 					}
 				}
 			}

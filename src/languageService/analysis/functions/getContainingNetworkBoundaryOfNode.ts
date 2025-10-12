@@ -30,6 +30,55 @@ export function isEarlyReturningIfStatement(provider: Provider, statement: ts.St
 	return false;
 }
 
+export function isConditionOfIfStatement(provider: Provider, expression: ts.Node) {
+	const { ts } = provider;
+
+	return (
+		findAncestorNode(
+			expression,
+			(node): node is ts.Node => {
+				if (ts.isIfStatement(node)) {
+					if (node.expression === expression || node.expression.getChildren().includes(expression))
+						return true;
+				}
+
+				return false;
+			},
+			ts.isExpressionStatement,
+		) !== undefined
+	);
+}
+
+export function findAncestorNode<T extends ts.Node>(
+	node: ts.Node,
+	getNode: (value: ts.Node) => value is T,
+	breakAtNode?: (value: ts.Node) => boolean,
+) {
+	// if (getNode(node)) return node;
+
+	for (const parentNode of visitParentNodes(node)) {
+		if (breakAtNode?.(parentNode)) break;
+		if (getNode(parentNode)) return parentNode;
+	}
+
+	return undefined;
+}
+
+export function isValidIfStatementLocation(provider: Provider, node: ts.Node) {
+	const { ts } = provider;
+
+	let parent = node.parent;
+	if (ts.isParenthesizedExpression(parent)) {
+		parent = parent.parent;
+	}
+
+	if (ts.isExpressionStatement(parent)) {
+		return true;
+	}
+
+	return false;
+}
+
 export interface ContainingBoundaryInfo {
 	readonly boundary: NetworkBoundary;
 	readonly boundaryNode: ts.Node | undefined;
@@ -39,6 +88,22 @@ export function getContainingNetworkBoundaryOfNode(provider: Provider, node: ts.
 	const { ts } = provider;
 
 	for (const parentNode of visitParentNodes(node)) {
+		if (ts.isConditionalExpression(parentNode)) {
+			const result = parseDirectives(provider, parentNode.condition, true, true);
+
+			if (result?.isServer && result.isClient) {
+				return { boundary: NetworkBoundary.Invalid, boundaryNode: parentNode };
+			}
+
+			if (result?.isServer) {
+				return { boundary: NetworkBoundary.Server, boundaryNode: parentNode };
+			}
+
+			if (result?.isClient) {
+				return { boundary: NetworkBoundary.Client, boundaryNode: parentNode };
+			}
+		}
+
 		if (ts.isBlock(parentNode)) {
 			for (const statement of parentNode.statements) {
 				if (node === statement) break;
