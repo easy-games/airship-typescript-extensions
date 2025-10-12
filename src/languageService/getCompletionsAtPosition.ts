@@ -87,8 +87,8 @@ export function getCompletionsAtPositionFactory(provider: Provider): ts.Language
 					// If this symbol has the @hideinherited tag, remove if this is an inherited node
 					if (name === "hideinherited" && node !== declaration) modifiedEntry.remove = true;
 					// If this symbol has the @(server|client|shared) tag, set boundary
-					if (name === "server") modifiedEntry.boundary = NetworkBoundary.Server;
 					if (name === "client") modifiedEntry.boundary = NetworkBoundary.Client;
+					if (name === "server") modifiedEntry.boundary = NetworkBoundary.Server;
 					if (name === "shared") modifiedEntry.boundary = NetworkBoundary.Shared;
 				}
 

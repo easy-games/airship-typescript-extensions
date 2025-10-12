@@ -3,7 +3,7 @@ import { AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE, AirshipCompilerDiagnosti
 import { Provider } from "../util/provider";
 import { findAirshipBehaviour } from "../util/airshipBehaviours";
 import { AirshipCompilerDiagnostic } from "./getSemanticDiagnostics";
-import { TypeOfExpression } from "typescript";
+import { NetworkBoundary } from "../util/boundary";
 
 export function getCodeFixesAtPositionFactory(provider: Provider): ts.LanguageService["getCodeFixesAtPosition"] {
 	const { service, serviceProxy, ts } = provider;
@@ -12,7 +12,14 @@ export function getCodeFixesAtPositionFactory(provider: Provider): ts.LanguageSe
 		let orig = [...service.getCodeFixesAtPosition(file, start, end, codes, formatOptions, preferences)];
 
 		serviceProxy.getSemanticDiagnostics(file).forEach((diagnostic) => {
-			// const sourceFile = provider.getSourceFile(file);
+			/*
+				if (diagnostic.start !== undefined && diagnostic.length !== undefined) {
+					if (start >= diagnostic.start && end <= diagnostic.start + diagnostic.length) {
+					*/
+
+			if (diagnostic.start === undefined || diagnostic.length === undefined) return;
+			if (start < diagnostic.start || end > diagnostic.start + diagnostic.length) return;
+
 			const airshipDiagnostic = diagnostic as AirshipCompilerDiagnostic;
 
 			if (diagnostic.code === AirshipCompilerDiagnosticCode.ForInStatementUsage) {
@@ -85,6 +92,78 @@ export function getCodeFixesAtPositionFactory(provider: Provider): ts.LanguageSe
 						},
 					],
 				});
+			}
+
+			if (
+				diagnostic.code === AirshipCompilerDiagnosticCode.NetworkBoundaryMismatch &&
+				airshipDiagnostic.networkBoundary
+			) {
+				const node = airshipDiagnostic.node as ts.IfStatement | ts.CallExpression;
+				const {
+					node: nodeBoundary,
+					parent: parentBoundary,
+					parentNode: parentBoundaryNode,
+				} = airshipDiagnostic.networkBoundary;
+
+				if (
+					parentBoundaryNode &&
+					ts.isMethodDeclaration(parentBoundaryNode) &&
+					parentBoundary === NetworkBoundary.Shared
+				) {
+					const span = ts.createTextSpan(parentBoundaryNode.getStart(), 0);
+
+					const expr =
+						nodeBoundary === NetworkBoundary.Server
+							? "Server"
+							: nodeBoundary === NetworkBoundary.Client
+							? "Client"
+							: "false";
+
+					orig.push({
+						fixName: "fixBoundaryMethod",
+						description: `Set method '${parentBoundaryNode.name.getText()}' to ${expr}-only`,
+						changes: [
+							{
+								fileName: file,
+								textChanges: [
+									{
+										newText: `@${expr}() `,
+										span,
+									},
+								],
+							},
+						],
+					});
+				}
+
+				if (parentBoundary === NetworkBoundary.Shared) {
+					const span = ts.createTextSpan(node.getStart(), 0);
+
+					const expr =
+						nodeBoundary === NetworkBoundary.Server
+							? "Server"
+							: nodeBoundary === NetworkBoundary.Client
+							? "Client"
+							: undefined;
+
+					if (expr) {
+						orig.push({
+							fixName: "fixBoundaryWithDirectiveWrap",
+							description: `Add ${expr} check before statement`,
+							changes: [
+								{
+									fileName: file,
+									textChanges: [
+										{
+											newText: `if ($${expr.toUpperCase()}) `,
+											span,
+										},
+									],
+								},
+							],
+						});
+					}
+				}
 			}
 		});
 

@@ -11,7 +11,7 @@
 	},
 	"scripts": {
 		"build": "tsc",
-		"watch": "tsc -w",
+		"build-watch": "tsc -w",
 		"prepare": "tsc"
 	},
 	"directories": {},

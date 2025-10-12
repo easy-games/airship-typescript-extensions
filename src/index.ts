@@ -108,6 +108,7 @@ export = function init(modules: { typescript: typeof ts }) {
 				AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE,
 				AirshipCompilerDiagnosticCode.ForInStatementUsage,
 				AirshipCompilerDiagnosticCode.NoTypeOfNode,
+				AirshipCompilerDiagnosticCode.NetworkBoundaryMismatch,
 			],
 			getCodeActions: () => undefined,
 		});

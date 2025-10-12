@@ -3,10 +3,14 @@ import { AirshipCompilerDiagnosticCode } from "../util/constants";
 import { Provider } from "../util/provider";
 import { getAirshipBehaviours } from "../util/airshipBehaviours";
 import luau from "@roblox-ts/luau-ast";
-import { isMethodCall } from "./analysis/functions/isMethodCall";
-import { getNetworkBoundaryOfMethod } from "./analysis/functions/getNetworkBoundaryOfMethod";
+import {
+	getNetworkBoundaryOfFunction,
+	getNetworkBoundaryOfMethod,
+} from "./analysis/functions/getNetworkBoundaryOfMethod";
 import { getContainingNetworkBoundaryOfNode } from "./analysis/functions/getContainingNetworkBoundaryOfNode";
 import { NetworkBoundary } from "../util/boundary";
+import { parseDirectives } from "./analysis/functions/parseDirectives";
+import { identity } from "typescript";
 
 interface ClarifiedDiagnostic {
 	regex: RegExp;
@@ -79,8 +83,15 @@ function isShadowingCompilerDecorator(id: string) {
 	return compilerIdentifiers.includes(id);
 }
 
+interface NetworkBoundaryInfo {
+	readonly parent: NetworkBoundary;
+	readonly parentNode?: ts.Node;
+	readonly node: NetworkBoundary;
+}
+
 export interface AirshipCompilerDiagnostic extends ts.Diagnostic {
-	node?: ts.Node;
+	readonly node?: ts.Node;
+	readonly networkBoundary?: NetworkBoundaryInfo;
 }
 
 export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageService["getSemanticDiagnostics"] {
@@ -98,19 +109,23 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 			node: ts.Node,
 			messageText: string,
 			category = ts.DiagnosticCategory.Error,
+			data?: Omit<AirshipCompilerDiagnostic, keyof ts.Diagnostic | "node">,
 		) {
 			const startPos = node.getStart();
 			const endPos = node.getEnd() - startPos;
 
-			diagnostics.push({
-				category,
-				file: sourceFile,
-				messageText: messageText,
-				start: startPos,
-				code,
-				length: endPos,
-				node,
-			} as AirshipCompilerDiagnostic);
+			diagnostics.push(
+				identity<AirshipCompilerDiagnostic>({
+					category,
+					file: sourceFile,
+					messageText: messageText,
+					start: startPos,
+					code,
+					length: endPos,
+					node,
+					...data,
+				}),
+			);
 		}
 
 		if (config.diagnosticsMode !== "off") {
@@ -254,19 +269,85 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 					}
 				}
 
-				if (provider.config.networkBoundaryCheck === "warning") {
+				if (provider.config.networkBoundaryCheck !== "off") {
 					if (ts.isCallExpression(node) /* && isMethodCall(provider.typeChecker, node) */) {
 						const symbol = provider.typeChecker.getSymbolAtLocation(node.expression);
 						if (symbol?.valueDeclaration && ts.isMethodDeclaration(symbol.valueDeclaration)) {
 							const callContext = getNetworkBoundaryOfMethod(provider, symbol.valueDeclaration);
-							const parentContext = getContainingNetworkBoundaryOfNode(provider, node.expression);
+							const parentBoundaryInfo = getContainingNetworkBoundaryOfNode(provider, node.expression);
 
-							if (callContext !== NetworkBoundary.Shared && callContext !== parentContext) {
+							if (callContext !== NetworkBoundary.Shared && callContext !== parentBoundaryInfo.boundary) {
 								pushNodeDiagnostic(
 									AirshipCompilerDiagnosticCode.NetworkBoundaryMismatch,
 									node,
-									`Method ${symbol.valueDeclaration.name.getText()} is marked ${callContext}-only, however is being called in ${parentContext} context.`,
+									`Method ${symbol.valueDeclaration.name.getText()} is marked ${callContext}-only, however is being called in ${
+										parentBoundaryInfo.boundary
+									} context.`,
 									ts.DiagnosticCategory.Warning,
+									{
+										networkBoundary: {
+											node: callContext,
+											parent: parentBoundaryInfo.boundary,
+											parentNode: parentBoundaryInfo.boundaryNode,
+										},
+									},
+								);
+							}
+						}
+						if (
+							symbol?.valueDeclaration &&
+							ts.isFunctionDeclaration(symbol.valueDeclaration) &&
+							symbol.valueDeclaration.name
+						) {
+							const callContext = getNetworkBoundaryOfFunction(provider, symbol.valueDeclaration);
+							const parentBoundaryInfo = getContainingNetworkBoundaryOfNode(provider, node.expression);
+
+							if (callContext !== NetworkBoundary.Shared && callContext !== parentBoundaryInfo.boundary) {
+								pushNodeDiagnostic(
+									AirshipCompilerDiagnosticCode.NetworkBoundaryMismatch,
+									node,
+									`Function ${symbol.valueDeclaration.name.getText()} is marked ${callContext}-only, however is being called in ${
+										parentBoundaryInfo.boundary
+									} context.`,
+									ts.DiagnosticCategory.Warning,
+									{
+										networkBoundary: {
+											node: callContext,
+											parent: parentBoundaryInfo.boundary,
+											parentNode: parentBoundaryInfo.boundaryNode,
+										},
+									},
+								);
+							}
+						}
+					}
+
+					if (ts.isIfStatement(node)) {
+						const hasDirectives = parseDirectives(provider, node.expression, true, true);
+						if (hasDirectives !== undefined) {
+							const containingBoundaryInfo = getContainingNetworkBoundaryOfNode(provider, node);
+							const ifBoundary = hasDirectives.isServer
+								? NetworkBoundary.Server
+								: hasDirectives.isClient
+								? NetworkBoundary.Client
+								: NetworkBoundary.Shared;
+
+							if (
+								containingBoundaryInfo.boundary !== NetworkBoundary.Shared &&
+								containingBoundaryInfo.boundary !== ifBoundary
+							) {
+								pushNodeDiagnostic(
+									AirshipCompilerDiagnosticCode.NetworkBoundaryMismatch,
+									node,
+									`Statement is marked ${ifBoundary}-only, but will never run due to being inside a ${containingBoundaryInfo.boundary}-only boundary`,
+									ts.DiagnosticCategory.Warning,
+									{
+										networkBoundary: {
+											node: ifBoundary,
+											parent: containingBoundaryInfo.boundary,
+											parentNode: containingBoundaryInfo.boundaryNode,
+										},
+									},
 								);
 							}
 						}
