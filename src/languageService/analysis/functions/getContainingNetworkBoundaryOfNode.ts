@@ -18,13 +18,14 @@ export function isEarlyReturningIfStatement(provider: Provider, statement: ts.St
 
 	if (!ts.isIfStatement(statement)) return false;
 	if (ts.isReturnStatement(statement.thenStatement)) return true;
+	if (ts.isThrowStatement(statement.thenStatement)) return true;
 	if (ts.isBlock(statement.thenStatement)) {
 		const block = statement.thenStatement;
 		if (block.statements.length === 0) return false;
 
 		const last = block.statements[block.statements.length - 1];
 
-		return ts.isReturnStatement(last);
+		return ts.isReturnStatement(last) || ts.isThrowStatement(last);
 	}
 
 	return false;

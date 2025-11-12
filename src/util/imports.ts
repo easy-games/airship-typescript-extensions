@@ -1,6 +1,6 @@
 import type ts from "typescript";
 import path from "path";
-import { assert } from "../Rojo/PathTranslator/assert";
+import { assert } from "../project/PathTranslator/assert";
 import { Provider } from "./provider";
 
 /**

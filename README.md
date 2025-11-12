@@ -1,11 +1,8 @@
-# unity-ts Extensions
-This is a Language Service plugin that improves the editing experience while using unity-ts.
+<div align="center"><img width="128px" src="https://i.imgur.com/FVzCvw3.png"></div>
+<h1 align="center"><a href="https://github.com/easy-games/unity-ts">Airship TypeScript</a> Language Server Plugin</h1>
+<div align="center">The TypeScript language server plugin for Airship</div>
 
-### Features
-<!-- - Remove or prefix cross-boundary imports in intellisense. -->
-<!-- - Warn about non-type only cross-boundary imports. -->
-- Remove internal fields from unity-ts types.
-- Remove deprecated entries from intellisense.
-- Remove @hidden entries from intellisense.
-- AirshipBehaviour semantics
-
+# Features
+- Airship TypeScript compiler diagnostics
+- Airship TypeScript code fixes
+- Validation and hints for [Network boundaries](https://docs.airship.gg/typescript/server-only-client-only-code).

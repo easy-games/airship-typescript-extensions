@@ -66,28 +66,52 @@ function isServerDirective(provider: Provider, expression: ts.Expression, includ
 	}
 }
 
-export function isNotServerDirective(provider: Provider, expression: ts.Expression, includeImplicitCalls: boolean) {
-	const { ts, symbols } = provider;
+function isNotServerDirective(provider: Provider, expression: ts.Expression, includeImplicitCalls: boolean) {
+	const { ts, symbols, typeChecker } = provider;
 
 	if (isExclamationUnaryExpression(provider, expression)) {
+		if (includeImplicitCalls && symbols.isServerSymbol && ts.isCallExpression(expression.operand)) {
+			const symbol = typeChecker.getSymbolAtLocation(expression.operand.expression);
+			if (!symbol) return false;
+			return symbols.isServerSymbol === symbol;
+		}
+
 		const symbol = provider.typeChecker.getSymbolAtLocation(expression.operand);
 		if (!symbol) return false;
 		return symbols.$SERVER === symbol;
 	}
+
+	return false;
 }
 
-export function isNotClientDirective(provider: Provider, expression: ts.Expression, includeImplicitCalls: boolean) {
-	const { ts, symbols } = provider;
+function isNotClientDirective(provider: Provider, expression: ts.Expression, includeImplicitCalls: boolean) {
+	const { ts, symbols, typeChecker } = provider;
 
 	if (isExclamationUnaryExpression(provider, expression)) {
+		if (includeImplicitCalls && symbols.isClientSymbol && ts.isCallExpression(expression.operand)) {
+			const symbol = typeChecker.getSymbolAtLocation(expression.operand.expression);
+			if (!symbol) return false;
+			return symbols.isClientSymbol === symbol;
+		}
+
 		const symbol = provider.typeChecker.getSymbolAtLocation(expression.operand);
 		if (!symbol) return false;
 		return symbols.$CLIENT === symbol;
 	}
+
+	return false;
 }
 
-function isClientDirective(provider: Provider, expression: ts.Expression) {
-	const { ts, symbols } = provider;
+function isClientDirective(provider: Provider, expression: ts.Expression, includeImplicitCalls: boolean) {
+	const { ts, typeChecker, symbols } = provider;
+
+	if (symbols.isClientSymbol) {
+		if (includeImplicitCalls && ts.isCallExpression(expression)) {
+			const symbol = typeChecker.getSymbolAtLocation(expression.expression);
+			if (!symbol) return false;
+			return symbols.isClientSymbol === symbol;
+		}
+	}
 
 	if (ts.isIdentifier(expression)) {
 		const symbol = provider.typeChecker.getSymbolAtLocation(expression);
@@ -113,7 +137,7 @@ export function getDirective(
 		return CompilerDirective.SERVER;
 	}
 
-	if (isClientDirective(provider, expression)) {
+	if (isClientDirective(provider, expression, includeImplicitCalls)) {
 		return CompilerDirective.CLIENT;
 	}
 

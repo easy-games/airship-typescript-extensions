@@ -1,7 +1,7 @@
 import type ts from "typescript";
 import path from "path";
 import { Provider } from "../provider";
-import { isPathDescendantOf } from "../../Rojo/RojoResolver/fsUtil";
+import { isPathDescendantOf } from "../../project/util/fsUtil";
 
 export function isNodeInternal(provider: Provider, node: ts.Node) {
 	const sourceFile = node.getSourceFile();

@@ -1,5 +1,5 @@
 import path from "path";
-import { isPathDescendantOf } from "../Rojo/RojoResolver/fsUtil";
+import { isPathDescendantOf } from "../project/util/fsUtil";
 import { Provider } from "./provider";
 
 export enum NetworkBoundary {

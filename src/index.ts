@@ -18,9 +18,6 @@ import { getCompletionsAtPositionFactory } from "./languageService/getCompletion
 import { getSemanticDiagnosticsFactory } from "./languageService/getSemanticDiagnostics";
 import { getCodeFixesAtPositionFactory } from "./languageService/getCodeFixesAtPosition";
 import { getCompletionEntryDetailsFactory } from "./languageService/getCompletionEntryDetails";
-import {} from "./languageService/analysis/functions/getContainingNetworkBoundaryOfNode";
-import {} from "./languageService/analysis/functions/getNetworkBoundaryOfMethod";
-import {} from "./languageService/analysis/functions/isMethodCall";
 import { isAirshipProject } from "./util/functions/isAirshipProject";
 
 const AIRSHIP_MARKER = "_airship_marker_service";
@@ -72,21 +69,16 @@ export = function init(modules: { typescript: typeof ts }) {
 				if (serverDecorator) {
 					const text = ((serverDecorator.expression as ts.CallExpression).expression as ts.Identifier).text;
 					(info.tags ??= []).push({
-						name: text,
+						name: text.toLowerCase(),
 						text: [
 							{
-								text: text + "-only method",
+								text: "declared as a " + text.toLowerCase() + "-only method",
 								kind: "className",
 							},
 						],
 					});
 				}
 			}
-
-			// (info.displayParts ??= []).push({
-			// 	text: "Test",
-			// 	kind: "text",
-			// });
 
 			return info;
 		};

@@ -1,5 +1,5 @@
 import { parseConfig } from "./functions/parseConfig";
-import { PathTranslator } from "../Rojo/PathTranslator";
+import { PathTranslator } from "../project/PathTranslator";
 import { PluginCreateInfo } from "../types";
 
 export function createConstants(info: PluginCreateInfo) {

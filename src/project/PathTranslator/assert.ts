@@ -9,8 +9,8 @@ export function assert(value: unknown, message?: string): asserts value {
 		debugger;
 		throw new Error(
 			`Assertion Failed! ${message ?? ""}` +
-				"\nThis is a compiler bug! Please submit a bug report here:" +
-				"\nhttps://github.com/roblox-ts/roblox-ts/issues",
+				"\nThis is a language server bug! Please submit a bug report here:" +
+				"\nhttps://github.com/easy-games/airship-typescript-extensions/issues",
 		);
 	}
 }
