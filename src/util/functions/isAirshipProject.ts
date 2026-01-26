@@ -7,7 +7,7 @@ import path from "path";
  * Checks if this project is a roblox-ts project.
  */
 export function isAirshipProject(ts: typeof tslib, info: PluginCreateInfo) {
-	const typescriptDir = path.join(info.project.getCurrentDirectory(), "TypeScript~");
+	const typescriptDir = path.join(info.project.getCurrentDirectory(), "Typescript~");
 
 	if (!fs.existsSync(typescriptDir)) return false;
 
