@@ -1,12 +1,26 @@
 import path from "path";
 import { isPathDescendantOf } from "../project/util/fsUtil";
 import { Provider } from "./provider";
+import { ContainingBoundaryInfo } from "languageService/analysis/functions/getContainingNetworkBoundaryOfNode";
 
 export enum NetworkBoundary {
 	Client = "Client",
 	Server = "Server",
+	Host = "Host",
 	Shared = "Shared",
 	Invalid = "Invalid",
+}
+
+export function isValidBoundary(containingBoundaryInfo: ContainingBoundaryInfo, child: NetworkBoundary) {
+	if (containingBoundaryInfo.boundary === NetworkBoundary.Server) {
+		return child === NetworkBoundary.Server || child === NetworkBoundary.Host;
+	}
+
+	if (containingBoundaryInfo.boundary === NetworkBoundary.Client) {
+		return child === NetworkBoundary.Client || child === NetworkBoundary.Host;
+	}
+
+	return containingBoundaryInfo.boundary === NetworkBoundary.Shared;
 }
 
 /**

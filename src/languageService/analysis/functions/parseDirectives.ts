@@ -18,6 +18,11 @@ export interface DirectivesAnalysisResult {
 	readonly isComplexDirectiveCheck: boolean;
 	readonly isServer: boolean;
 	readonly isClient: boolean;
+
+	readonly containsNotServer: boolean;
+	readonly containsNotClient: boolean;
+
+	readonly canBeTruthy: boolean;
 }
 
 function isAndBinaryExpression(provider: Provider, expression: ts.Expression): expression is ts.BinaryExpression {
@@ -52,6 +57,9 @@ export function parseDirectives(
 				isComplexDirectiveCheck: false,
 				isServer: directive === CompilerDirective.SERVER || directive === CompilerDirective.NOT_CLIENT,
 				isClient: directive === CompilerDirective.CLIENT || directive === CompilerDirective.NOT_SERVER,
+				containsNotClient: directive === CompilerDirective.NOT_CLIENT,
+				containsNotServer: directive === CompilerDirective.NOT_SERVER,
+				canBeTruthy: true,
 			};
 		}
 	}
@@ -108,6 +116,11 @@ export function parseDirectives(
 					directives.includes(CompilerDirective.SERVER) || directives.includes(CompilerDirective.NOT_CLIENT),
 				isClient:
 					directives.includes(CompilerDirective.CLIENT) || directives.includes(CompilerDirective.NOT_SERVER),
+
+				containsNotClient: directives.includes(CompilerDirective.NOT_CLIENT),
+				containsNotServer: directives.includes(CompilerDirective.NOT_SERVER),
+
+				canBeTruthy: !(directives.includes(CompilerDirective.NOT_CLIENT) && directives.includes(CompilerDirective.NOT_SERVER))
 			};
 
 			return result;

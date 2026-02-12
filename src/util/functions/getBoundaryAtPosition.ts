@@ -41,8 +41,8 @@ function getBoundaryFromExpressionFactory(provider: Provider, isServerSymbol: ts
 			return callSymbol === isServerSymbol
 				? NetworkBoundary.Server
 				: callSymbol === isClientSymbol
-				? NetworkBoundary.Client
-				: undefined;
+					? NetworkBoundary.Client
+					: undefined;
 		} else if (ts.isParenthesizedExpression(expression)) {
 			return getBoundaryFromExpression(expression.expression);
 		} else if (ts.isBinaryExpression(expression)) {
@@ -57,31 +57,35 @@ function getBoundaryFromExpressionFactory(provider: Provider, isServerSymbol: ts
 					return expression.right.kind === ts.SyntaxKind.TrueKeyword
 						? lhs
 						: expression.right.kind === ts.SyntaxKind.FalseKeyword
-						? getOppositeBoundary(lhs)
-						: undefined;
+							? getOppositeBoundary(lhs)
+							: undefined;
 				case ts.SyntaxKind.ExclamationEqualsToken:
 				case ts.SyntaxKind.ExclamationEqualsEqualsToken:
 					if (!lhs) return undefined;
 					return expression.right.kind === ts.SyntaxKind.FalseKeyword
 						? lhs
 						: expression.right.kind === ts.SyntaxKind.TrueKeyword
-						? getOppositeBoundary(lhs)
-						: undefined;
+							? getOppositeBoundary(lhs)
+							: undefined;
 				case ts.SyntaxKind.BarBarToken:
 				case ts.SyntaxKind.BarBarEqualsToken:
 					if (!lhs || !rhs) return undefined;
 					return lhs === rhs ? lhs : undefined;
 				case ts.SyntaxKind.AmpersandAmpersandToken:
 					const flattenedTree = flattenBinaryExpressionTree(provider, expression, operator);
-					let result: NetworkBoundary | undefined;
+					// let result: NetworkBoundary | undefined;
+
+					const boundaries = new Array<NetworkBoundary>();
 					for (const node of flattenedTree) {
 						const nodeBoundary = getBoundaryFromExpression(node);
-						result ??= nodeBoundary;
-						if (nodeBoundary && nodeBoundary !== result) {
-							return undefined;
-						}
+						if (nodeBoundary && !boundaries.includes(nodeBoundary)) boundaries.push(nodeBoundary);
 					}
-					return result;
+
+					if (boundaries.includes(NetworkBoundary.Client) && boundaries.includes(NetworkBoundary.Server)) {
+						return NetworkBoundary.Host;
+					}
+
+					return boundaries[0];
 			}
 		} else if (ts.isPrefixUnaryExpression(expression)) {
 			const operator = expression.operator;

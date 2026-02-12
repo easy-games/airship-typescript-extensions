@@ -9,6 +9,8 @@ export interface PluginConfig {
 	hideDeprecated: boolean;
 	diagnosticsMode: "off" | "warning" | "error" | "message";
 	networkBoundaryInfo: boolean;
+	layers: string[];
+	useGameConfig: boolean;
 }
 
 /**
@@ -38,5 +40,7 @@ export function parseConfig(unsafeConfig: Partial<PluginConfig>): PluginConfig {
 		networkBoundaryInfo: config.networkBoundaryInfo ?? true,
 		hideDeprecated: config.hideDeprecated ?? false,
 		diagnosticsMode: config.diagnosticsMode ?? "warning",
+		layers: [],
+		useGameConfig: false,
 	};
 }

@@ -8,9 +8,10 @@ import {
 	getNetworkBoundaryOfMethod,
 } from "./analysis/functions/getNetworkBoundaryOfMethod";
 import { getContainingNetworkBoundaryOfNode } from "./analysis/functions/getContainingNetworkBoundaryOfNode";
-import { NetworkBoundary } from "../util/boundary";
+import { isValidBoundary, NetworkBoundary } from "../util/boundary";
 import { parseDirectives } from "./analysis/functions/parseDirectives";
 import { identity } from "typescript";
+import { isValidMethodUsage } from "../util/functions/isValidMethodUsage";
 
 interface ClarifiedDiagnostic {
 	regex: RegExp;
@@ -211,7 +212,7 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 						if (
 							typeAtLocation?.valueDeclaration &&
 							ts.isMethodDeclaration(typeAtLocation.valueDeclaration) &&
-							!ts.isCallExpression(node.parent)
+							!isValidMethodUsage(node)
 						) {
 							pushNodeDiagnostic(
 								AirshipCompilerDiagnosticCode.IndexingMethodWithoutCalling,
@@ -264,7 +265,7 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 						pushNodeDiagnostic(
 							AirshipCompilerDiagnosticCode.ForInStatementUsage,
 							node,
-							`for-in loop statements are not supported!`,
+							`'for x in y' loops aren't supported - do you mean 'for x of y'?`,
 						);
 					}
 				}
@@ -280,8 +281,7 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 								pushNodeDiagnostic(
 									AirshipCompilerDiagnosticCode.NetworkBoundaryMismatch,
 									node,
-									`Method ${symbol.valueDeclaration.name.getText()} is marked ${callContext}-only, however is being called in ${
-										parentBoundaryInfo.boundary
+									`Method ${symbol.valueDeclaration.name.getText()} is marked ${callContext}-only, however is being called in ${parentBoundaryInfo.boundary
 									} context.`,
 									ts.DiagnosticCategory.Warning,
 									{
@@ -306,8 +306,7 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 								pushNodeDiagnostic(
 									AirshipCompilerDiagnosticCode.NetworkBoundaryMismatch,
 									node,
-									`Function ${symbol.valueDeclaration.name.getText()} is marked ${callContext}-only, however is being called in ${
-										parentBoundaryInfo.boundary
+									`Function ${symbol.valueDeclaration.name.getText()} is marked ${callContext}-only, however is being called in ${parentBoundaryInfo.boundary
 									} context.`,
 									ts.DiagnosticCategory.Warning,
 									{
@@ -326,16 +325,33 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 						const hasDirectives = parseDirectives(provider, node.expression, true, true);
 						if (hasDirectives !== undefined) {
 							const containingBoundaryInfo = getContainingNetworkBoundaryOfNode(provider, node);
-							const ifBoundary = hasDirectives.isServer
-								? NetworkBoundary.Server
-								: hasDirectives.isClient
-								? NetworkBoundary.Client
-								: NetworkBoundary.Shared;
 
-							if (
-								containingBoundaryInfo.boundary !== NetworkBoundary.Shared &&
-								containingBoundaryInfo.boundary !== ifBoundary
-							) {
+							let ifBoundary = NetworkBoundary.Shared;
+							if (hasDirectives.isServer && hasDirectives.isClient) {
+								ifBoundary = NetworkBoundary.Host;
+							} else if (hasDirectives.isServer) {
+								ifBoundary = NetworkBoundary.Server;
+							} else if (hasDirectives.isClient) {
+								ifBoundary = NetworkBoundary.Client;
+							}
+
+							if (!hasDirectives.canBeTruthy) {
+								pushNodeDiagnostic(
+									AirshipCompilerDiagnosticCode.NetworkBoundaryMismatch,
+									node.expression,
+									`This expression will never be truthy, and thus will never run the code in this if statement`,
+									ts.DiagnosticCategory.Error,
+									{
+										networkBoundary: {
+											node: ifBoundary,
+											parent: containingBoundaryInfo.boundary,
+											parentNode: containingBoundaryInfo.boundaryNode,
+										},
+									},
+								);
+							}
+
+							if (!isValidBoundary(containingBoundaryInfo, ifBoundary)) {
 								pushNodeDiagnostic(
 									AirshipCompilerDiagnosticCode.NetworkBoundaryMismatch,
 									node,
@@ -350,6 +366,35 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 									},
 								);
 							}
+						}
+					}
+				}
+
+				if (provider.config.useGameConfig) {
+					if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+						const symbol = provider.typeChecker.getSymbolAtLocation(node.expression.expression);
+						if (symbol && provider.typeChecker.symbolToString(symbol) === "LayerMask") {
+							for (const argv of node.arguments) {
+								if (!ts.isStringLiteral(argv)) continue;
+
+
+								if (!provider.config.layers.includes(argv.text)) {
+									const startPos = argv.getStart();
+									const endPos = argv.getEnd() - startPos;
+
+									diagnostics.push({
+										category: ts.DiagnosticCategory.Warning,
+										code: AirshipCompilerDiagnosticCode.InvalidLayerMaskName,
+										file: sourceFile,
+										messageText:
+											`'${argv.text}' is not a valid layer name (not defined in GameConfig)`,
+										start: startPos,
+										length: endPos,
+									});
+								}
+							}
+
+
 						}
 					}
 				}

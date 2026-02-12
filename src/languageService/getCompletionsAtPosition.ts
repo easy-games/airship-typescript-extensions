@@ -8,6 +8,7 @@ import { getWithDefault } from "../util/functions/getOrDefault";
 import { getBoundaryAtPosition } from "../util/functions/getBoundaryAtPosition";
 import { findPrecedingSymbol } from "../util/functions/findPrecedingSymbol";
 import path from "path";
+import { CompletionInfo, ScriptElementKind } from "typescript";
 
 interface ModifiedEntry {
 	remove?: boolean;
@@ -211,12 +212,14 @@ export function getCompletionsAtPositionFactory(provider: Provider): ts.Language
 	return (file, pos, opt) => {
 		provider.symbols.refresh(provider);
 
+		const sourceFile = provider.getSourceFile(file);
+		const typeChecker = provider.program.getTypeChecker();
+
 		const fileBoundary = getNetworkBoundary(provider, file);
-		const orig = service.getCompletionsAtPosition(file, pos, opt);
+		let orig = service.getCompletionsAtPosition(file, pos, opt);
 		if (orig) {
 			const modifiedEntries = new Map<string, Array<ModifiedEntry>>();
-			const sourceFile = provider.getSourceFile(file);
-			const typeChecker = provider.program.getTypeChecker();
+
 			let scopeBoundary = fileBoundary;
 			if (sourceFile) {
 				const token = ts.findPrecedingToken(pos, sourceFile) ?? sourceFile.endOfFileToken;
@@ -282,8 +285,45 @@ export function getCompletionsAtPositionFactory(provider: Provider): ts.Language
 
 				entries.push(completionEntry);
 			});
-			orig.entries = entries;
 		}
+
+		const nodeAtPos = ts.getTokenAtPosition(sourceFile, pos);
+		if (ts.isStringLiteral(nodeAtPos) && ts.isCallExpression(nodeAtPos.parent)) {
+			if (ts.isPropertyAccessExpression(nodeAtPos.parent.expression)) {
+				orig ??= {
+					entries: [],
+					isGlobalCompletion: false,
+					isMemberCompletion: false,
+					isNewIdentifierLocation: false
+				} satisfies CompletionInfo;
+
+				const typeId = typeChecker.getSymbolAtLocation(nodeAtPos.parent.expression.expression);
+
+				if (typeId !== undefined && typeChecker.symbolToString(typeId) === "LayerMask") {
+					const layers = provider.config.layers;
+					for (const layer of layers) {
+						if (layer == null) continue;
+						const index = layers.indexOf(layer);
+						if (index > 31) break;
+
+						orig.entries.push({
+							name: `"${layer}"`,
+							kind: ScriptElementKind.enumElement,
+							sortText: `${index.toString().padStart(2, '0')}`,
+							insertText: `${layer}`,
+							labelDetails: {
+								description: index < 17 ? `Layer ${index} ` : `Layer ${index} `,
+								detail: index < 17 ? ` Airship Layer` : ` User Layer`
+							}
+						})
+					}
+				}
+			}
+
+
+		}
+
+
 		return orig;
 	};
 }

@@ -40,6 +40,11 @@ export const enum AirshipCompilerDiagnosticCode {
 	InvalidEquality,
 	InvalidInverseEquality,
 	NetworkBoundaryMismatch,
+	InvalidLayerMaskName,
+}
+
+export const enum TypescriptDiagnosticCode {
+	MissingImplements = 2420, // Class incorrectly implements interface
 }
 
 export type Constants = ReturnType<typeof createConstants>;

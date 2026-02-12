@@ -1,6 +1,6 @@
 {
 	"name": "@easy-games/airship-typescript-extensions",
-	"version": "1.3.2",
+	"version": "1.4.0",
 	"description": "A TypeScript Language Service plugin for Airship",
 	"main": "index.js",
 	"author": "",

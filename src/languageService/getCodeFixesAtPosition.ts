@@ -1,5 +1,5 @@
 import type ts from "typescript";
-import { AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE, AirshipCompilerDiagnosticCode } from "../util/constants";
+import { AIRSHIP_BEHAVIOUR_DECLARATION_DIAGNOSTIC_CODE, AirshipCompilerDiagnosticCode, TypescriptDiagnosticCode } from "../util/constants";
 import { Provider } from "../util/provider";
 import { findAirshipBehaviour } from "../util/airshipBehaviours";
 import { AirshipCompilerDiagnostic } from "./getSemanticDiagnostics";
@@ -7,18 +7,33 @@ import { NetworkBoundary } from "../util/boundary";
 import { findAncestorNode } from "./analysis/functions/getContainingNetworkBoundaryOfNode";
 import { createPrinter, factory } from "typescript";
 
+const fixClassIncorrectlyImplementsInterface = "fixClassIncorrectlyImplementsInterface";
+
+function overloadDefaultFixes(fixes: ts.CodeFixAction[]) {
+	// Since this is luau-based, we use 'error' instead of 'throw new Error'
+	const interfaceFix = fixes?.find(f => f.fixName === fixClassIncorrectlyImplementsInterface);
+	if (interfaceFix) {
+		for (const change of interfaceFix.changes) {
+			for (const textChange of change.textChanges) {
+				textChange.newText = textChange.newText.replace(/(throw new Error)/ig, "error")
+			}
+		}
+	}
+}
+
 export function getCodeFixesAtPositionFactory(provider: Provider): ts.LanguageService["getCodeFixesAtPosition"] {
 	const { service, serviceProxy, ts } = provider;
 
 	return (file, start, end, codes, formatOptions, preferences) => {
 		let orig = [...service.getCodeFixesAtPosition(file, start, end, codes, formatOptions, preferences)];
+		overloadDefaultFixes(orig);
+
 
 		serviceProxy.getSemanticDiagnostics(file).forEach((diagnostic) => {
 			if (diagnostic.start === undefined || diagnostic.length === undefined) return;
 			if (start < diagnostic.start || end > diagnostic.start + diagnostic.length) return;
 
 			const airshipDiagnostic = diagnostic as AirshipCompilerDiagnostic;
-
 			if (diagnostic.code === AirshipCompilerDiagnosticCode.ForInStatementUsage) {
 				if (airshipDiagnostic.node && ts.isForInStatement(airshipDiagnostic.node)) {
 					const node = airshipDiagnostic.node;
@@ -91,6 +106,78 @@ export function getCodeFixesAtPositionFactory(provider: Provider): ts.LanguageSe
 				});
 			}
 
+			if (diagnostic.code === AirshipCompilerDiagnosticCode.IndexingMethodWithoutCalling) {
+				const node = airshipDiagnostic.node as ts.PropertyAccessExpression;
+				if (ts.isVariableDeclaration(node.parent)) {
+					const span = ts.createTextSpan(node.getStart(), node.getEnd() - node.getStart());
+
+					// const symbol = provider.typeChecker.getTypeAtLocation(node.expression);
+					// const symbolName = symbol ? provider.typeChecker.typeToString(symbol) : undefined;
+
+					let symbolName: string | undefined;
+					if (ts.isThis(node.expression)) {
+						const symbol = provider.typeChecker.getSymbolAtLocation(node.expression);
+						symbolName = symbol ? provider.typeChecker.symbolToString(symbol) : undefined;
+					} else {
+						const symbol = provider.typeChecker.getTypeAtLocation(node.expression);
+						symbolName = symbol ? provider.typeChecker.typeToString(symbol) : undefined;
+					}
+
+					if (symbolName) {
+						const argsId = factory.createIdentifier("args");
+
+						const argParams = factory.createParameterDeclaration(
+							undefined,
+							factory.createToken(ts.SyntaxKind.DotDotDotToken),
+							argsId,
+							undefined,
+							factory.createTypeReferenceNode(
+								factory.createIdentifier("Parameters"),
+								[
+									factory.createIndexedAccessTypeNode(
+										factory.createTypeReferenceNode(factory.createIdentifier(symbolName)),
+										factory.createLiteralTypeNode(factory.createStringLiteral(node.name.text))
+									)
+								]
+							)
+						)
+
+						const expr = factory.createArrowFunction(
+							undefined,
+							undefined,
+							[
+								argParams
+							],
+							undefined,
+							factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+							factory.createCallExpression(
+								node,
+								undefined,
+								[
+									factory.createSpreadElement(argsId)
+								]
+							)
+						)
+
+						orig.push({
+							fixName: "wrapIndexedMethodInCallableFunction",
+							description: `Wrap in callable arrow function: (...) => ${symbolName}.${node.name.text}(...)`,
+							changes: [
+								{
+									fileName: file,
+									textChanges: [
+										{
+											newText: ts.createPrinter({}).printNode(ts.EmitHint.Expression, expr, node.getSourceFile()),
+											span,
+										},
+									],
+								},
+							],
+						});
+					}
+				}
+			}
+
 			if (
 				diagnostic.code === AirshipCompilerDiagnosticCode.NetworkBoundaryMismatch &&
 				airshipDiagnostic.networkBoundary
@@ -113,8 +200,8 @@ export function getCodeFixesAtPositionFactory(provider: Provider): ts.LanguageSe
 						nodeBoundary === NetworkBoundary.Server
 							? "Server"
 							: nodeBoundary === NetworkBoundary.Client
-							? "Client"
-							: "false";
+								? "Client"
+								: "false";
 
 					orig.push({
 						fixName: "fixBoundaryMethod",
@@ -137,8 +224,8 @@ export function getCodeFixesAtPositionFactory(provider: Provider): ts.LanguageSe
 					nodeBoundary === NetworkBoundary.Server
 						? "Server"
 						: nodeBoundary === NetworkBoundary.Client
-						? "Client"
-						: undefined;
+							? "Client"
+							: undefined;
 
 				if (!contextLabel) return;
 

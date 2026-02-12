@@ -4,7 +4,7 @@
 
 "use strict";
 
-import {} from "ts-expose-internals";
+import { } from "ts-expose-internals";
 import type ts from "typescript";
 import { createProxy } from "./util/functions/createProxy";
 import { Provider } from "./util/provider";
@@ -19,8 +19,14 @@ import { getSemanticDiagnosticsFactory } from "./languageService/getSemanticDiag
 import { getCodeFixesAtPositionFactory } from "./languageService/getCodeFixesAtPosition";
 import { getCompletionEntryDetailsFactory } from "./languageService/getCompletionEntryDetails";
 import { isAirshipProject } from "./util/functions/isAirshipProject";
+import { ScriptElementKind } from "typescript";
+import { isLayerMaskLiteral } from "./util/functions/isLayerMaskFunction";
+import { getQuickInfoAtPositionFactory } from "./languageService/getQuickInfoAtPosition";
 
 const AIRSHIP_MARKER = "_airship_marker_service";
+
+
+
 
 export = function init(modules: { typescript: typeof ts }) {
 	const ts = modules.typescript;
@@ -46,42 +52,11 @@ export = function init(modules: { typescript: typeof ts }) {
 		serviceProxy["getSemanticDiagnostics"] = getSemanticDiagnosticsFactory(provider);
 		serviceProxy["getCodeFixesAtPosition"] = getCodeFixesAtPositionFactory(provider);
 		serviceProxy["getCompletionsAtPosition"] = getCompletionsAtPositionFactory(provider);
-		serviceProxy["getCompletionEntryDetails"] = getCompletionEntryDetailsFactory(provider);
-		serviceProxy["getQuickInfoAtPosition"] = (fileName, position) => {
-			const info = provider.service.getQuickInfoAtPosition(fileName, position);
-			if (!info) return undefined;
-
-			const sourceFile = provider.getSourceFile(fileName);
-			const node = ts.getTokenAtPosition(sourceFile, position);
-			const symbol = provider.typeChecker.getSymbolAtLocation(node);
-
-			if (symbol && symbol.valueDeclaration && ts.isMethodDeclaration(symbol.valueDeclaration)) {
-				const serverDecorator = symbol.valueDeclaration.modifiers
-					?.filter((f) => ts.isDecorator(f))
-					.find((f) => {
-						return (
-							ts.isCallExpression(f.expression) &&
-							ts.isIdentifier(f.expression.expression) &&
-							["Server", "Client"].includes(f.expression.expression.text)
-						);
-					});
-
-				if (serverDecorator) {
-					const text = ((serverDecorator.expression as ts.CallExpression).expression as ts.Identifier).text;
-					(info.tags ??= []).push({
-						name: text.toLowerCase(),
-						text: [
-							{
-								text: "declared as a " + text.toLowerCase() + "-only method",
-								kind: "className",
-							},
-						],
-					});
-				}
-			}
-
-			return info;
+		serviceProxy["provideInlayHints"] = (fileName, textSpan, preferences) => {
+			return provider.service.provideInlayHints(fileName, textSpan, preferences);
 		};
+		serviceProxy["getCompletionEntryDetails"] = getCompletionEntryDetailsFactory(provider);
+		serviceProxy["getQuickInfoAtPosition"] = getQuickInfoAtPositionFactory(provider);
 
 		serviceProxy["getCompilerOptionsDiagnostics"] = () => {
 			const core = provider.service.getCompilerOptionsDiagnostics();
@@ -101,6 +76,7 @@ export = function init(modules: { typescript: typeof ts }) {
 				AirshipCompilerDiagnosticCode.ForInStatementUsage,
 				AirshipCompilerDiagnosticCode.NoTypeOfNode,
 				AirshipCompilerDiagnosticCode.NetworkBoundaryMismatch,
+				AirshipCompilerDiagnosticCode.IndexingMethodWithoutCalling,
 			],
 			getCodeActions: () => undefined,
 		});
@@ -130,7 +106,7 @@ export = function init(modules: { typescript: typeof ts }) {
 
 		provider.log("Airship language extensions has loaded.");
 		return serviceProxy;
-	}
+	};
 
 	function onConfigurationChanged(config: any) {
 		if (provider) {
