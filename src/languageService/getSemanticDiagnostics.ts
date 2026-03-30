@@ -213,7 +213,7 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 						if (
 							typeAtLocation?.valueDeclaration &&
 							ts.isMethodDeclaration(typeAtLocation.valueDeclaration) &&
-							!isValidMethodUsage(node)
+							!isValidMethodUsage(provider, node)
 						) {
 							pushNodeDiagnostic(
 								AirshipCompilerDiagnosticCode.IndexingMethodWithoutCalling,
