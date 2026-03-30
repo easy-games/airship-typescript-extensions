@@ -2,6 +2,7 @@ import path from "path";
 import { isPathDescendantOf } from "../project/util/fsUtil";
 import { Provider } from "./provider";
 import { ContainingBoundaryInfo } from "languageService/analysis/functions/getContainingNetworkBoundaryOfNode";
+import ts from "typescript";
 
 export enum NetworkBoundary {
 	Client = "Client",
@@ -66,3 +67,9 @@ export function getNetworkBoundary(provider: Provider, file: string): NetworkBou
 export function boundaryCanSee(from: NetworkBoundary, to: NetworkBoundary) {
 	return from === to || to === NetworkBoundary.Shared;
 }
+
+export function isPlatformScopedProperty({ typeChecker, symbols }: Provider, property: ts.PropertyAccessExpression) {
+	const symbol = typeChecker.getSymbolAtLocation(property.name);
+	return symbol === symbols.platformServerNamespaceSymbol || symbol === symbols.platformClientNamespaceSymbol;
+}
+

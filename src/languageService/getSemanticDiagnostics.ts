@@ -1,14 +1,15 @@
 import type ts from "typescript";
 import { AirshipCompilerDiagnosticCode } from "../util/constants";
 import { Provider } from "../util/provider";
-import { getAirshipBehaviours } from "../util/airshipBehaviours";
+import { getAirshipBehaviours, isPlatformNamespace } from "../util/airshipBehaviours";
 import luau from "@roblox-ts/luau-ast";
 import {
 	getNetworkBoundaryOfFunction,
 	getNetworkBoundaryOfMethod,
+	getNetworkBoundaryOfProperty,
 } from "./analysis/functions/getNetworkBoundaryOfMethod";
 import { getContainingNetworkBoundaryOfNode } from "./analysis/functions/getContainingNetworkBoundaryOfNode";
-import { isValidBoundary, NetworkBoundary } from "../util/boundary";
+import { isPlatformScopedProperty, isValidBoundary, NetworkBoundary } from "../util/boundary";
 import { parseDirectives } from "./analysis/functions/parseDirectives";
 import { identity } from "typescript";
 import { isValidMethodUsage } from "../util/functions/isValidMethodUsage";
@@ -271,6 +272,27 @@ export function getSemanticDiagnosticsFactory(provider: Provider): ts.LanguageSe
 				}
 
 				if (provider.config.networkBoundaryCheck !== "off") {
+					if (ts.isPropertyAccessExpression(node) && isPlatformScopedProperty(provider, node)) {
+						const platformBoundary = getNetworkBoundaryOfProperty(provider, node);
+						const accessContext = getContainingNetworkBoundaryOfNode(provider, node);
+						if (platformBoundary !== accessContext.boundary) {
+							if (accessContext.boundary === NetworkBoundary.Shared) {
+								pushNodeDiagnostic(
+									AirshipCompilerDiagnosticCode.PlatformServicesBoundaryMismatch,
+									node,
+									`Accessing ${platformBoundary.toLowerCase()} platform services here could throw an error, you may want to wrap this in a ${platformBoundary.toLowerCase()}-only check`,
+									ts.DiagnosticCategory.Warning,
+								);
+							} else {
+								pushNodeDiagnostic(
+									AirshipCompilerDiagnosticCode.PlatformServicesBoundaryMismatch,
+									node,
+									`Invalid access to ${platformBoundary.toLowerCase()} platform services from ${accessContext.boundary.toLowerCase()}`
+								);
+							}
+						}
+					}
+
 					if (ts.isCallExpression(node) /* && isMethodCall(provider.typeChecker, node) */) {
 						const symbol = provider.typeChecker.getSymbolAtLocation(node.expression);
 						if (symbol?.valueDeclaration && ts.isMethodDeclaration(symbol.valueDeclaration)) {

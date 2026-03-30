@@ -50,6 +50,11 @@ function getOriginalSymbolOfNode(provider: Provider, node: ts.Node) {
 	return symbol;
 }
 
+export function isPlatformNamespace(provider: Provider, id: ts.Identifier) {
+	return provider.typeChecker.getSymbolAtLocation(id) === provider.symbols.platformNamespaceSymbol;
+}
+
+
 function isAirshipBehaviour(provider: Provider, declaration: ts.ClassDeclaration): boolean {
 	const extendsNode = getExtendsNode(provider, declaration);
 	if (!extendsNode) return false;

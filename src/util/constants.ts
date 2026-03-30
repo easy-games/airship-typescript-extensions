@@ -41,6 +41,7 @@ export const enum AirshipCompilerDiagnosticCode {
 	InvalidInverseEquality,
 	NetworkBoundaryMismatch,
 	InvalidLayerMaskName,
+	PlatformServicesBoundaryMismatch,
 }
 
 export const enum TypescriptDiagnosticCode {

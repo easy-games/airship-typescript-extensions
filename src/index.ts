@@ -77,6 +77,7 @@ export = function init(modules: { typescript: typeof ts }) {
 				AirshipCompilerDiagnosticCode.NoTypeOfNode,
 				AirshipCompilerDiagnosticCode.NetworkBoundaryMismatch,
 				AirshipCompilerDiagnosticCode.IndexingMethodWithoutCalling,
+				AirshipCompilerDiagnosticCode.PlatformServicesBoundaryMismatch,
 			],
 			getCodeActions: () => undefined,
 		});

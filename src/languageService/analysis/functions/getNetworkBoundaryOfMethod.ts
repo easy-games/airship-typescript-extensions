@@ -1,5 +1,5 @@
 import type ts from "typescript";
-import { NetworkBoundary } from "../../../util/boundary";
+import { isPlatformScopedProperty, NetworkBoundary } from "../../../util/boundary";
 import { Provider } from "../../../util/provider";
 
 function getNetworkBoundaryTrivia(node: ts.MethodDeclaration | ts.FunctionDeclaration): NetworkBoundary | undefined {
@@ -53,5 +53,18 @@ export function getNetworkBoundaryOfMethod(
 export function getNetworkBoundaryOfFunction(provider: Provider, node: ts.FunctionDeclaration): NetworkBoundary {
 	const boundary = getNetworkBoundaryTrivia(node);
 	if (boundary) return boundary;
+	return NetworkBoundary.Shared;
+}
+
+export function getNetworkBoundaryOfProperty(provider: Provider, node: ts.PropertyAccessExpression): NetworkBoundary {
+	if (isPlatformScopedProperty(provider, node)) {
+		const symbol = provider.typeChecker.getSymbolAtLocation(node.name);
+		if (symbol === provider.symbols.platformClientNamespaceSymbol) {
+			return NetworkBoundary.Client;
+		} else if (symbol === provider.symbols.platformServerNamespaceSymbol) {
+			return NetworkBoundary.Server;
+		}
+	}
+
 	return NetworkBoundary.Shared;
 }

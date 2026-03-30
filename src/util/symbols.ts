@@ -8,6 +8,10 @@ export class SymbolProvider {
 	isServerSymbol: ts.Symbol | undefined;
 	isClientSymbol: ts.Symbol | undefined;
 
+	platformNamespaceSymbol: ts.Symbol | undefined;
+	platformServerNamespaceSymbol: ts.Symbol | undefined;
+	platformClientNamespaceSymbol: ts.Symbol | undefined;
+
 	public refresh(provider: Provider) {
 		const { typeChecker, ts } = provider;
 
@@ -34,6 +38,31 @@ export class SymbolProvider {
 				if (isClient) this.isClientSymbol = typeChecker.getSymbolAtLocation(isClient.name);
 			}
 		}
+
+		const airshipNamespacesFile = provider.getSourceFile("AirshipPackages/@Easy/Core/Shared/Airship.ts");
+		if (airshipNamespacesFile) {
+			const platformNamespaceDeclaration = airshipNamespacesFile.statements.find((f): f is ts.ModuleDeclaration => ts.isModuleDeclaration(f) && f.name.text === "Platform");
+			
+			if (platformNamespaceDeclaration) {
+				this.platformNamespaceSymbol = typeChecker.getSymbolAtLocation(platformNamespaceDeclaration.name);
+				// provider.log("ns symbol is", this.platformNamespaceSymbol ? typeChecker.symbolToString(this.platformNamespaceSymbol) : "none");
+
+				if (platformNamespaceDeclaration.body && ts.isModuleBlock(platformNamespaceDeclaration.body)) {
+					const platformServerNamespaceDeclaration = platformNamespaceDeclaration.body.statements.find((f): f is ts.ModuleDeclaration => ts.isModuleDeclaration(f) && f.name.text === "Server");
+					if (platformServerNamespaceDeclaration) {
+						this.platformServerNamespaceSymbol = typeChecker.getSymbolAtLocation(platformServerNamespaceDeclaration.name);
+					}
+
+					const platformClientNamespaceDeclaration = platformNamespaceDeclaration.body.statements.find((f): f is ts.ModuleDeclaration => ts.isModuleDeclaration(f) && f.name.text === "Client");
+					if (platformClientNamespaceDeclaration) {
+						this.platformClientNamespaceSymbol = typeChecker.getSymbolAtLocation(platformClientNamespaceDeclaration.name);
+					}
+				}
+			} else {
+				provider.log("could not find ns symbol");
+			}
+		}
+
 	}
 
 	// public getSymbolByName(name: keyof typeof SYMBOL_NAMES) {
